@@ -1,0 +1,198 @@
+"""Dalio's three gauges, scored.
+
+The thresholds below are the opinionated part of this repo. They are stated
+here, in one place, so they can be argued with — which is the whole point of
+writing a framework down as code instead of prose. Change them and the dashboard
+changes; the sources do not.
+
+Gauge definitions are from How Countries Go Broke: The Big Cycle (2025):
+  1. debt service relative to government revenue
+  2. selling of government debt relative to demand for it
+  3. central-bank money printing to absorb the shortfall
+"""
+from dataclasses import dataclass, field
+
+CONTAINED, ELEVATED, SEVERE, CRITICAL = "contained", "elevated", "severe", "critical"
+ORDER = [CONTAINED, ELEVATED, SEVERE, CRITICAL]
+
+# --- thresholds -------------------------------------------------------------
+# Interest as a share of federal receipts. Dalio's "plaque": the level at which
+# debt service starts crowding out committed spending.
+INTEREST_TO_REVENUE = [(0.10, CONTAINED), (0.20, ELEVATED), (0.30, SEVERE)]
+
+# Weighted-average rate Treasury pays. Crossing 4% puts interest past ~25% of
+# receipts at current revenue with no new borrowing and no rate change.
+AVG_RATE_CRITICAL = 4.0
+
+# Gauge 2: the curve. Dalio's marker is rates rising *led by the long end*.
+LONG_END_LEAD_BP = 25       # 30y must outrun the 2y by this much over 12m
+CURVE_STEEP_BP = 150        # 30y-2y this wide is a duration-demand problem
+
+# Gauge 3: monetization fires when the balance sheet turns up while the deficit
+# is still structurally large.
+DEFICIT_GDP_LARGE = 0.05
+
+
+@dataclass
+class Gauge:
+    key: str
+    name: str
+    status: str
+    headline: str
+    metrics: dict = field(default_factory=dict)
+    notes: list = field(default_factory=list)
+
+
+def _band(x, table, above=CRITICAL):
+    for cut, label in table:
+        if x < cut:
+            return label
+    return above
+
+
+def _worst(*statuses):
+    return max(statuses, key=ORDER.index)
+
+
+# --- gauge 1 ----------------------------------------------------------------
+def gauge_1(s):
+    f = s["us_fiscal"]
+    ann = 12 / f["fytd_months"]
+    receipts = f["fytd_receipts"] * ann
+    outlays = f["fytd_outlays"] * ann
+    deficit = f["fytd_deficit"] * ann
+    interest = f["fytd_interest_marketable"] * ann
+    ratio = interest / receipts
+    avg_rate = f["avg_rate_series"][-1][1]
+    market_10y = s["yields"]["now"]["y10"]
+
+    status = _band(ratio, INTEREST_TO_REVENUE)
+    if avg_rate >= AVG_RATE_CRITICAL:
+        status = _worst(status, SEVERE)
+
+    notes = []
+    rising = sum(1 for a, b in zip(f["avg_rate_series"], f["avg_rate_series"][1:])
+                 if b[1] > a[1])
+    if rising >= 4:
+        notes.append(
+            f"The average rate paid has risen in {rising} of the last "
+            f"{len(f['avg_rate_series']) - 1} months, toward a market 10-year of "
+            f"{market_10y:.2f}%. The {market_10y - avg_rate:.2f}pp gap is committed "
+            "future interest expense, not a forecast.")
+
+    return Gauge("g1", "Debt service relative to revenue", status,
+                 f"Interest is {ratio:.1%} of federal revenue.",
+                 {"interest_to_receipts": ratio,
+                  "debt_to_receipts": f["debt_held_public"] / receipts,
+                  "debt_total_to_receipts": f["debt_total"] / receipts,
+                  "outlays_to_receipts": outlays / receipts,
+                  "receipts": receipts, "outlays": outlays,
+                  "deficit": deficit, "interest": interest,
+                  "avg_rate": avg_rate, "repricing_gap_pp": market_10y - avg_rate},
+                 notes)
+
+
+# --- gauge 2 ----------------------------------------------------------------
+def gauge_2(s):
+    now, ago = s["yields"]["now"], s["yields"]["yr_ago"]
+    d30 = (now["y30"] - ago["y30"]) * 100
+    d2 = (now["y2"] - ago["y2"]) * 100
+    curve = (now["y30"] - now["y2"]) * 100
+    curve_ago = (ago["y30"] - ago["y2"]) * 100
+    long_end_leads = (d30 - d2) >= LONG_END_LEAD_BP
+
+    status = ELEVATED if now["y30"] >= 5.0 else CONTAINED
+    if long_end_leads and curve >= CURVE_STEEP_BP:
+        status = SEVERE
+    if now["y30"] >= 6.5 and long_end_leads:
+        status = CRITICAL
+
+    notes = []
+    if not long_end_leads:
+        notes.append(
+            f"Dalio's marker for this gauge is rates rising led by the long end. "
+            f"Over 12 months the 30-year rose {d30:+.0f}bp against the 2-year's "
+            f"{d2:+.0f}bp, and the 30y-2y spread moved {curve_ago:.0f}bp -> "
+            f"{curve:.0f}bp. The marker is NOT confirmed: the short end led.")
+    return Gauge("g2", "Selling relative to demand", status,
+                 f"30-year at {now['y30']:.2f}%, curve {curve:+.0f}bp.",
+                 {"y30": now["y30"], "y2": now["y2"], "y10": now["y10"],
+                  "d30_bp": d30, "d2_bp": d2, "curve_bp": curve,
+                  "curve_bp_ago": curve_ago, "long_end_leads": long_end_leads},
+                 notes)
+
+
+# --- gauge 3 ----------------------------------------------------------------
+def gauge_3(s):
+    fed = s["fed"]
+    wow = fed["balance_sheet_usd_mn"] - fed["prior_week_usd_mn"]
+    off_peak = fed["balance_sheet_usd_mn"] / fed["peak_usd_mn"] - 1
+    expanding = wow > 0
+
+    status = ELEVATED if expanding else CONTAINED
+    notes = []
+    if not expanding:
+        notes.append(
+            "The balance sheet is still contracting. In Dalio's template this is "
+            "the gauge that decides the exit: pressure with a shrinking central "
+            "bank is a solvency problem, the same pressure with an expanding one "
+            "is a currency problem. It has not fired.")
+    return Gauge("g3", "Central-bank monetization", status,
+                 f"Fed balance sheet ${fed['balance_sheet_usd_mn']/1e6:.2f}T, "
+                 f"{off_peak:+.1%} vs peak.",
+                 {"balance_sheet": fed["balance_sheet_usd_mn"],
+                  "wow_change": wow, "off_peak": off_peak, "expanding": expanding},
+                 notes)
+
+
+# --- the measuring stick ----------------------------------------------------
+def vs_gold(s):
+    """Every currency and index priced in gold. Dalio's Q8 in one table."""
+    m = s["market"]
+    g, g0 = m["gold_usd_oz"], m["gold_usd_oz_yr_ago"]
+    gold_ratio = g / g0
+
+    currencies = {}
+    for code in ["USD"] + [c for c in m["fx_now"] if c in m["fx_yr_ago"]]:
+        rate = 1.0 if code == "USD" else m["fx_now"][code]
+        rate0 = 1.0 if code == "USD" else m["fx_yr_ago"][code]
+        gold_now, gold_then = g * rate, g0 * rate0
+        currencies[code] = {
+            "gold_price_now": gold_now,
+            "gold_up_pct": (gold_now / gold_then - 1) * 100,
+            "currency_vs_gold_pct": (gold_then / gold_now - 1) * 100,
+        }
+
+    assets = {}
+    for name, key in (("S&P 500", "spx"), ("KOSPI", "kospi")):
+        yoy = m[f"{key}_yoy_pct"] / 100
+        assets[name] = {"level": m[key], "local_pct": yoy * 100,
+                        "in_gold_pct": ((1 + yoy) / gold_ratio - 1) * 100}
+
+    return {"gold_usd": g, "gold_yoy_pct": (gold_ratio - 1) * 100,
+            "currencies": currencies, "assets": assets}
+
+
+def read(snapshot):
+    gs = [gauge_1(snapshot), gauge_2(snapshot), gauge_3(snapshot)]
+    fired = [g for g in gs if ORDER.index(g.status) >= ORDER.index(ELEVATED)]
+    return {"gauges": gs, "stage": _worst(*[g.status for g in gs]),
+            "n_elevated": len(fired), "gold": vs_gold(snapshot)}
+
+
+if __name__ == "__main__":
+    import json, sys
+    from .config import SNAPSHOT
+    r = read(json.load(open(sys.argv[1] if len(sys.argv) > 1 else SNAPSHOT)))
+    print(f"STAGE: {r['stage'].upper()}  ({r['n_elevated']}/3 gauges elevated+)\n")
+    for g in r["gauges"]:
+        print(f"[{g.status.upper():>9}] {g.name}\n            {g.headline}")
+        for n in g.notes:
+            print(f"            · {n}")
+        print()
+    print("Currencies vs gold, 12m:")
+    for c, v in r["gold"]["currencies"].items():
+        print(f"  {c}: {v['currency_vs_gold_pct']:+6.1f}%")
+    print("\nAssets:")
+    for a, v in r["gold"]["assets"].items():
+        print(f"  {a}: local {v['local_pct']:+.1f}%  in gold {v['in_gold_pct']:+.1f}%")
