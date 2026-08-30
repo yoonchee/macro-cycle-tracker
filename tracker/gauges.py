@@ -61,7 +61,7 @@ def gauge_1(s):
     receipts = f["fytd_receipts"] * ann
     outlays = f["fytd_outlays"] * ann
     deficit = f["fytd_deficit"] * ann
-    interest = f["fytd_interest_marketable"] * ann
+    interest = f["fytd_interest_public"] * ann
     ratio = interest / receipts
     avg_rate = f["avg_rate_series"][-1][1]
     market_10y = s["yields"]["now"]["y10"]

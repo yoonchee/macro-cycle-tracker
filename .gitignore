@@ -5,3 +5,6 @@ __pycache__/
 data/history.sqlite
 out/*.html
 !out/.gitkeep
+
+# docs/index.html is the committed build output — keep it tracked
+!docs/

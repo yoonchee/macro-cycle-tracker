@@ -1,0 +1,95 @@
+name: Refresh monitor
+
+on:
+  schedule:
+    # Sundays 07:00 KST (Saturday 22:00 UTC) — after the week's Treasury,
+    # H.4.1 and 한국부동산원 releases have all landed.
+    - cron: "0 22 * * 6"
+  workflow_dispatch:
+    inputs:
+      sources:
+        description: "Sources to refresh (space-separated), or blank for all"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # The store is gitignored, so carry it between runs. Sources backfill
+      # years of history, so a cache miss costs a slower run, not data.
+      - name: Restore series store
+        uses: actions/cache@v4
+        with:
+          path: data/history.sqlite
+          key: store-${{ github.run_id }}
+          restore-keys: store-
+
+      - run: pip install -r requirements.txt
+
+      - name: Fetch sources
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          ECOS_API_KEY: ${{ secrets.ECOS_API_KEY }}
+          REB_API_KEY: ${{ secrets.REB_API_KEY }}
+        run: python refresh.py ${{ inputs.sources }}
+
+      # snapshot.py raises on a missing or stale series rather than writing
+      # zeros, so a partial fetch fails the run instead of publishing a page
+      # that looks fine and isn't.
+      - name: Rebuild snapshot
+        run: python -m tracker.snapshot
+
+      - name: Score gauges
+        run: python -m tracker.gauges data/snapshot.json | tee gauges.txt
+
+      - name: Build dashboard
+        run: |
+          mkdir -p docs
+          python build.py --standalone --out docs/index.html
+          python build.py --out out/monitor.html
+
+      - name: Job summary
+        run: |
+          {
+            echo '## Gauge reading'
+            echo '```'
+            cat gauges.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: monitor-${{ github.run_number }}
+          path: |
+            docs/index.html
+            data/snapshot.json
+          retention-days: 90
+
+      - name: Commit refreshed data
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/snapshot.json docs/index.html
+          if git diff --cached --quiet; then
+            echo "no change"
+            exit 0
+          fi
+          AS_OF=$(python -c "import json;print(json.load(open('data/snapshot.json'))['as_of'])")
+          STAGE=$(head -1 gauges.txt)
+          git commit -m "Refresh monitor to ${AS_OF}" -m "${STAGE}"
+          git push

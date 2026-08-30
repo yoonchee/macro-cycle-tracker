@@ -113,6 +113,46 @@ def _ticks(lo, hi, n=4):
     return [round(lo + step * i, 1) for i in range(1, n + 1)]
 
 
+def share_area(points, lo=0, hi=100):
+    """Share of new mortgages written at a fixed rate, over time.
+
+    One series, so no legend — the title names it. Endpoint is emphasized and
+    directly labelled, and the peak is marked, because the story is the fall
+    between them rather than any single level.
+    """
+    if not points:
+        return ""
+    W, H, PAD_L, PAD_B, TOP = 720, 210, 46, 26, 16
+    n = len(points)
+    x = lambda i: PAD_L + i / max(n - 1, 1) * (W - PAD_L - 14)
+    y = lambda v: (H - PAD_B) - (v - lo) / (hi - lo) * (H - PAD_B - TOP)
+
+    line = " ".join(f"{x(i):.1f},{y(v):.1f}" for i, (_, v) in enumerate(points))
+    area = f"{PAD_L},{y(lo):.1f} " + line + f" {x(n-1):.1f},{y(lo):.1f}"
+
+    pi, (pd, pv) = max(enumerate(points), key=lambda t: t[1][1])
+    ld, lv = points[-1]
+    grid = "".join(f'<line class="ax" stroke-dasharray="2 4" opacity=".5" x1="{PAD_L}" '
+                   f'y1="{y(g):.1f}" x2="{W-14}" y2="{y(g):.1f}"></line>' for g in (25, 50, 75, 100))
+    gtext = "".join(f'<text x="{PAD_L-8}" y="{y(g)+4:.1f}">{g}%</text>' for g in (25, 50, 75, 100))
+    ticks = "".join(
+        f'<text x="{x(i):.1f}" y="{H-8}">{points[i][0][:7]}</text>'
+        for i in (0, n // 3, 2 * n // 3, n - 1))
+
+    return f'''<div class="svgwrap"><svg viewBox="0 0 {W} {H}" role="img"
+ aria-label="Share of new Korean mortgages written at a fixed rate, {points[0][0]} to {ld}: peak {pv:.1f}% in {pd}, latest {lv:.1f}%">
+<g class="axtext" text-anchor="end">{gtext}</g>{grid}
+<polygon points="{area}" fill="var(--accent)" opacity=".12"></polygon>
+<polyline points="{line}" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linejoin="round"></polyline>
+<circle cx="{x(pi):.1f}" cy="{y(pv):.1f}" r="4" fill="var(--muted)"></circle>
+<text class="dotlabel" fill="var(--muted)" text-anchor="middle" x="{x(pi):.1f}" y="{y(pv)-10:.1f}">{pv:.1f}%</text>
+<circle cx="{x(n-1):.1f}" cy="{y(lv):.1f}" r="5.5" fill="var(--crit)" stroke="var(--surface)" stroke-width="2"></circle>
+<text class="dotlabel" fill="var(--crit)" text-anchor="end" x="{x(n-1)-10:.1f}" y="{y(lv)+4:.1f}">{lv:.1f}%</text>
+<line class="ax" x1="{PAD_L}" y1="{H-PAD_B}" x2="{W-14}" y2="{H-PAD_B}"></line>
+<g class="axtext" text-anchor="middle">{ticks}</g>
+</svg></div>'''
+
+
 def gold_bars(currencies):
     rows = sorted(currencies.items(), key=lambda kv: kv[1]["currency_vs_gold_pct"])
     span = max(abs(v["currency_vs_gold_pct"]) for _, v in rows) * 1.26
@@ -238,25 +278,55 @@ def render(s):
   </tbody></table></div></div>
 </section>
 
-<section>{sechead("MARKER", "Japan and Korea")}
-  <div class="grid g2">
+<section>{sechead("MARKER", "The Korean buffer")}
+  <p>A US homeowner on a thirty-year fixed mortgage is short the bond: inflation
+  transfers wealth from the lender to them, which is why American housing absorbs
+  a rate shock through volume rather than price. Whether a Korean household has
+  any version of that buffer is a measurable question, and the answer has changed
+  fast.</p>
+
+  <div class="card striped s-crit">
+    <figure><div class="charttitle">Share of new mortgages written at a fixed rate</div>
+    <div class="chartsub">예금은행 주택담보대출, 신규취급액 기준 · monthly to {kr['fixed_share_date'][:7]}</div>
+    {share_area(kr['fixed_share_series'])}
+    <figcaption>Fixed-rate lending has fallen from {kr['fixed_share_peak']:.1f}% of new
+    mortgages in {kr['fixed_share_peak_date'][:7]} to {kr['fixed_share']:.1f}% — most of the
+    decline in the last eight months, as the Bank of Korea began tightening. Note
+    that Korean 고정형 is typically 혼합형: fixed for five years, then floating. The
+    buffer is real but far shorter-dated than the US thirty-year.</figcaption></figure>
+  </div>
+
+  {metrics(
+      metric("Fixed share, new loans", f"{kr['fixed_share']:.1f}%",
+             f"From {kr['fixed_share_yr_ago']:.1f}% a year ago"),
+      metric("Fixed premium", f"{kr['fixed_premium_pp']:+.2f}pp",
+             f"고정 {kr['mortgage_fixed']:.2f}% vs 변동 {kr['mortgage_floating']:.2f}%"),
+      metric("BOK base rate", f"{kr['base_rate']:.2f}%",
+             f"As of {kr['base_rate_date'][:7]}"),
+      metric("가계신용", f"{kr['household_credit']/1000:,.0f}조",
+             f"As of {kr['household_credit_date'][:7]}"))}
+
+  <div class="note"><p>The premium flipped sign. Through 2025 fixed-rate mortgages
+  were <em>cheaper</em> than floating and roughly nine in ten new borrowers took
+  them; fixed now costs {kr['fixed_premium_pp']:+.2f}pp more and fewer than one in three
+  do. Lenders are pricing the rate path before borrowers are — which is what the
+  withdrawal of a buffer looks like while it is happening.</p></div>
+
+  <div class="grid g2" style="margin-top:18px">
     <div class="card striped s-crit"><h3 style="margin-bottom:12px">Japan</h3>
-    {metrics(metric("10-year JGB", f"{jp['jgb10']:.2f}%", f"{jp['jgb10_chg_12m']*100:+.0f}bp over 12 months"),
-             metric("30-year JGB", f"{jp['jgb30']:.2f}%", f"{jp['jgb30_chg_12m']*100:+.0f}bp over 12 months"))}
+    {metrics(metric("10-year JGB", f"{jp['jgb10']:.2f}%",
+                    f"{jp['jgb10_chg_12m']*100:+.0f}bp over 12 months · monthly, to {jp['date'][:7]}"))}
     <p style="font-size:14px;margin-bottom:0">Japan carries roughly 215% debt-to-GDP
     on the assumption that yields stay near zero. Rising JGB yields turn Dalio's
     Q7 argument from theory into arithmetic.</p></div>
 
-    <div class="card striped s-warn"><h3 style="margin-bottom:12px">Korea</h3>
-    {metrics(metric("BOK base rate", f"{kr['base_rate']:.2f}%", f"From {kr['prev_rate']:.2f}% on {kr['last_hike']}"),
-             metric("CPI / core", f"{kr['cpi']:.1f}%", f"Core {kr['core_cpi']:.1f}%, above the 2% target"))}
-    <p style="font-size:14px">Korean mortgages are largely floating-rate, so policy
-    tightening reaches household cash flow immediately — there is no thirty-year-fixed
-    buffer of the kind that insulates US homeowners.</p>
-    <p style="font-size:14px;margin-bottom:0">Seoul apartments {kr['seoul_apt_wow']:+.2f}% in the
-    week to {kr['housing_date']}, but rotating rather than rising uniformly:
+    <div class="card striped s-warn"><h3 style="margin-bottom:12px">Seoul housing</h3>
+    <p style="font-size:14px">Apartments {kr['seoul_apt_wow']:+.2f}% in the week to
+    {kr['housing_date']}, rotating rather than rising uniformly:
     강남 {kr['gangnam_wow']:+.2f}% and 서초 {kr['seocho_wow']:+.2f}% against
-    강북 14개구 {kr['gangbuk14_wow']:+.2f}%.</p></div>
+    강북 14개구 {kr['gangbuk14_wow']:+.2f}%. 전세 {kr['jeonse_seoul_wow']:+.2f}%.</p>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:0">Hand-entered from
+    한국부동산원; the R-ONE API is not yet wired.</p></div>
   </div>
 </section>
 

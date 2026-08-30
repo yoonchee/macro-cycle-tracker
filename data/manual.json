@@ -1,0 +1,12 @@
+{
+  "_comment": "Figures no wired API serves yet. 한국부동산원 weekly apartment survey — update from https://www.reb.or.kr/r-one/ or wire the R-ONE API in tracker/sources/korea.py and delete this block.",
+  "korea_housing": {
+    "seoul_apt_wow": 0.22,
+    "gangnam_wow": -0.05,
+    "seocho_wow": -0.09,
+    "gangbuk14_wow": 0.30,
+    "gangnam11_wow": 0.14,
+    "jeonse_seoul_wow": 0.19,
+    "housing_date": "2026-08-17"
+  }
+}

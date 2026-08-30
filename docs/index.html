@@ -1,0 +1,331 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0"><title>Big Debt Cycle Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+:root{
+  --ground:#F6F4F0; --surface:#FFFFFF; --surface-2:#EFEDE7;
+  --ink:#16191E; --ink-2:#414A54; --muted:#6B7480;
+  --rule:#DFDBD3; --rule-strong:#C9C3B8;
+  --accent:#0D6E9E; --gold:#BA8420;
+  --warn:#B8701A; --crit:#A22D3C; --ok:#2F6E5E;
+  --shadow:0 1px 2px rgba(22,25,30,.05), 0 8px 24px -16px rgba(22,25,30,.22);
+  --maxw:1080px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#131820; --surface:#1A2128; --surface-2:#212A33;
+    --ink:#E4E8EC; --ink-2:#B4BEC8; --muted:#8A96A2;
+    --rule:#28313A; --rule-strong:#3A4652;
+    --accent:#3B9BC9; --gold:#B98529;
+    --warn:#C99239; --crit:#D9646F; --ok:#4E9B85;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#131820; --surface:#1A2128; --surface-2:#212A33;
+  --ink:#E4E8EC; --ink-2:#B4BEC8; --muted:#8A96A2;
+  --rule:#28313A; --rule-strong:#3A4652;
+  --accent:#3B9BC9; --gold:#B98529;
+  --warn:#C99239; --crit:#D9646F; --ok:#4E9B85;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:15px; line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:var(--maxw); margin:0 auto; padding:0 24px 88px}
+
+/* ---------- type ---------- */
+h1,h2,h3{font-family:"Newsreader",Georgia,"Times New Roman",serif; font-weight:500; text-wrap:balance; margin:0}
+h1{font-size:clamp(30px,4.6vw,46px); line-height:1.1; letter-spacing:-.012em}
+h2{font-size:clamp(21px,2.6vw,27px); line-height:1.2}
+h3{font-size:17px; line-height:1.3}
+p{margin:0 0 14px; max-width:66ch; color:var(--ink-2)}
+p.lede{font-size:16.5px; color:var(--ink-2)}
+strong{color:var(--ink); font-weight:600}
+.eyebrow{
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:11px; font-weight:600;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--muted);
+}
+.num{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,monospace; font-variant-numeric:tabular-nums}
+
+/* ---------- header ---------- */
+header.top{padding:56px 0 30px; border-bottom:1px solid var(--rule-strong)}
+.top .eyebrow{display:block; margin-bottom:14px}
+.top h1{margin-bottom:14px}
+.stamp{
+  display:flex; flex-wrap:wrap; gap:8px 22px; margin-top:20px;
+  font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--muted);
+}
+.stamp span{white-space:nowrap}
+
+/* ---------- stage read ---------- */
+.readout{
+  margin:30px 0 8px; padding:24px; border:1px solid var(--rule); border-radius:3px;
+  background:var(--surface); box-shadow:var(--shadow);
+}
+.readout .verdict{
+  font-family:"Newsreader",Georgia,serif; font-size:clamp(19px,2.3vw,24px); line-height:1.35;
+  color:var(--ink); margin:0 0 20px; max-width:60ch; text-wrap:balance;
+}
+.tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:1px; background:var(--rule)}
+.tile{background:var(--surface); padding:16px 18px; display:flex; flex-direction:column; gap:7px}
+.tile .g{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.1em; color:var(--muted); text-transform:uppercase}
+.tile .n{font-family:"Newsreader",Georgia,serif; font-size:16px; color:var(--ink); line-height:1.25}
+
+.pill{
+  display:inline-flex; align-items:center; gap:7px; align-self:flex-start;
+  font-family:"IBM Plex Mono",monospace; font-size:10.5px; font-weight:600;
+  letter-spacing:.1em; text-transform:uppercase; padding:3px 9px 3px 7px;
+  border-radius:2px; border:1px solid currentColor;
+}
+.pill::before{content:""; width:6px; height:6px; border-radius:50%; background:currentColor; flex:none}
+.pill.warn{color:var(--warn)} .pill.crit{color:var(--crit)} .pill.ok{color:var(--ok)} .pill.neutral{color:var(--muted)}
+
+/* ---------- sections ---------- */
+section{padding-top:52px}
+.sechead{display:flex; align-items:baseline; gap:16px; border-bottom:1px solid var(--rule-strong); padding-bottom:12px; margin-bottom:22px}
+.sechead .idx{
+  font-family:"IBM Plex Mono",monospace; font-size:12px; font-weight:600; color:var(--accent);
+  letter-spacing:.08em; flex:none;
+}
+.sechead h2{flex:1}
+
+.card{
+  background:var(--surface); border:1px solid var(--rule); border-radius:3px;
+  box-shadow:var(--shadow); padding:22px 24px; position:relative; overflow:hidden;
+}
+.card.striped{padding-left:26px}
+.card.striped::before{content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--stripe,var(--rule-strong))}
+.card.s-warn{--stripe:var(--warn)} .card.s-crit{--stripe:var(--crit)} .card.s-ok{--stripe:var(--ok)} .card.s-neutral{--stripe:var(--rule-strong)}
+
+.grid{display:grid; gap:18px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+
+/* ---------- metric rows ---------- */
+.metrics{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:1px; background:var(--rule); border:1px solid var(--rule); border-radius:3px; margin:4px 0 20px}
+.metric{background:var(--surface); padding:14px 16px}
+.metric .k{font-size:11.5px; font-family:"IBM Plex Mono",monospace; letter-spacing:.06em; color:var(--muted); text-transform:uppercase; display:block; margin-bottom:6px}
+.metric .v{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; font-size:23px; font-weight:500; color:var(--ink); line-height:1.1; letter-spacing:-.01em}
+.metric .s{font-size:12px; color:var(--muted); display:block; margin-top:5px; line-height:1.4}
+
+/* ---------- charts ---------- */
+figure{margin:0}
+figcaption{font-size:12.5px; color:var(--muted); margin-top:12px; line-height:1.5; max-width:62ch}
+.charttitle{font-family:"IBM Plex Sans",sans-serif; font-size:13px; font-weight:600; color:var(--ink); margin-bottom:3px}
+.chartsub{font-size:12px; color:var(--muted); margin-bottom:16px}
+.legend{display:flex; flex-wrap:wrap; gap:16px; margin-bottom:14px; font-size:12px; color:var(--ink-2)}
+.legend i{display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:6px; vertical-align:-1px}
+
+.bars{display:flex; flex-direction:column; gap:9px}
+.barrow{display:grid; grid-template-columns:52px 1fr; align-items:center; gap:12px}
+.barrow .lbl{font-family:"IBM Plex Mono",monospace; font-size:12.5px; color:var(--ink-2); text-align:right}
+.bartrack{position:relative; height:26px; background:var(--surface-2); border-radius:2px}
+.barfill{position:absolute; left:0; top:0; bottom:0; background:var(--gold); border-radius:0 4px 4px 0; transition:opacity .15s}
+.barval{position:absolute; top:50%; transform:translateY(-50%); font-family:"IBM Plex Mono",monospace; font-size:12px; font-weight:500; color:var(--ink); padding-left:9px}
+.barrow:hover .barfill{opacity:.78}
+
+table.data{width:100%; border-collapse:collapse; font-size:13.5px}
+table.data th, table.data td{padding:9px 12px; text-align:right; border-bottom:1px solid var(--rule)}
+table.data th{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); font-weight:600; border-bottom:1px solid var(--rule-strong)}
+table.data th:first-child, table.data td:first-child{text-align:left}
+table.data td.n{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; color:var(--ink)}
+table.data tr:last-child td{border-bottom:none}
+.scroller{overflow-x:auto}
+
+.svgwrap{width:100%}
+svg{display:block; width:100%; height:auto; overflow:visible}
+.ax{stroke:var(--rule); stroke-width:1}
+.axtext{font-family:"IBM Plex Mono",monospace; font-size:10.5px; fill:var(--muted)}
+.dotlabel{font-family:"IBM Plex Mono",monospace; font-size:11px; fill:var(--ink); font-weight:500}
+
+/* ---------- gap scale ---------- */
+.gapscale{margin:6px 0 4px; position:relative; height:74px}
+.gaptrack{position:absolute; left:0; right:0; top:30px; height:6px; background:var(--surface-2); border-radius:3px}
+.gapfill{position:absolute; top:30px; height:6px; background:var(--gold); opacity:.28; border-radius:3px}
+.marker{position:absolute; top:18px; width:2px; height:30px; background:var(--mk,var(--accent))}
+.marker span{position:absolute; top:-20px; left:50%; transform:translateX(-50%); white-space:nowrap; font-family:"IBM Plex Mono",monospace; font-size:11.5px; font-weight:600; color:var(--mk,var(--accent))}
+.marker small{position:absolute; top:34px; left:50%; transform:translateX(-50%); white-space:nowrap; font-size:10.5px; color:var(--muted); font-family:"IBM Plex Sans",sans-serif}
+.scaleends{position:absolute; left:0; right:0; top:44px; display:flex; justify-content:space-between; font-size:10.5px; color:var(--muted)}
+
+/* ---------- watchlist ---------- */
+ul.watch{list-style:none; padding:0; margin:0; display:grid; gap:1px; background:var(--rule); border:1px solid var(--rule); border-radius:3px}
+ul.watch li{background:var(--surface); padding:15px 18px; display:grid; grid-template-columns:1fr auto; gap:6px 18px; align-items:start}
+ul.watch .trg{color:var(--ink-2); font-size:14px; max-width:58ch}
+ul.watch .trg b{color:var(--ink); font-weight:600}
+ul.watch .st{font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); white-space:nowrap; padding-top:3px}
+
+.note{border-left:2px solid var(--accent); padding:2px 0 2px 16px; margin:20px 0; color:var(--ink-2); font-size:14.5px}
+.note p:last-child{margin-bottom:0}
+
+footer{margin-top:56px; padding-top:24px; border-top:1px solid var(--rule-strong); font-size:12.5px; color:var(--muted)}
+footer p{color:var(--muted); font-size:12.5px; max-width:72ch}
+footer a{color:var(--accent)}
+.srclist{display:grid; gap:5px; font-family:"IBM Plex Mono",monospace; font-size:11.5px; margin:12px 0 20px}
+
+@media (max-width:640px){
+  .wrap{padding:0 18px 64px}
+  header.top{padding-top:36px}
+  .barrow{grid-template-columns:44px 1fr}
+  ul.watch li{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important; animation:none!important}}
+</style>
+
+<div class="wrap">
+<header class="top">
+  <span class="eyebrow">Ray Dalio · How Countries Go Broke · gauge readings</span>
+  <h1>Big Debt Cycle Monitor</h1>
+  <p class="lede">Dalio says the late stage of a debt cycle is measurable, and that
+  almost nobody measures it. These are his three gauges plus his market-action
+  markers, read against live data — including where the tape disagrees with the
+  narrative.</p>
+  <div class="stamp"><span>Data as of <strong class="num">2026-08-28</strong></span>
+  <span>Fiscal: US Treasury</span><span>Rates: US Treasury</span><span>FX: ECB</span></div>
+</header>
+
+<div class="readout">
+  <p class="verdict">2 of the three gauges are elevated. Composite
+  stage: <strong>severe</strong>.</p>
+  <div class="tiles"><div class="tile"><span class="g">Gauge 1 · Debt service</span><span class="pill warn">Severe</span><span class="n">Interest is 20.1% of federal revenue.</span></div><div class="tile"><span class="g">Gauge 2 · Supply vs demand</span><span class="pill warn">Elevated</span><span class="n">30-year at 5.22%, curve +88bp.</span></div><div class="tile"><span class="g">Gauge 3 · Monetization</span><span class="pill ok">Not triggered</span><span class="n">Fed balance sheet $6.73T, -24.9% vs peak.</span></div></div>
+</div>
+
+<section><div class="sechead"><span class="idx">GAUGE 1</span><h2>Debt service relative to revenue</h2></div>
+  <p>Dalio's plaque metaphor: the slowest-moving gauge, and the one that sets the
+  ceiling on everything else.</p>
+  <div class="metrics"><div class="metric"><span class="k">Interest ÷ receipts</span><span class="v">20.1%</span><span class=s>~$1.08T on ~$5.38T revenue, annualized</span></div><div class="metric"><span class="k">Debt ÷ receipts</span><span class="v">6.00×</span><span class=s>Held by the public; 7.45× counting intragovernmental</span></div><div class="metric"><span class="k">Outlays ÷ receipts</span><span class="v">140%</span><span class=s>$2.16T deficit</span></div><div class="metric"><span class="k">Avg rate on the debt</span><span class="v">3.45%</span><span class=s>1.28pp below the market 10-year</span></div></div>
+  <div class="card striped s-warn">
+    <figure><div class="charttitle">The repricing pipeline</div>
+    <div class="chartsub">What Treasury pays on its stock of debt, against what the market charges today</div>
+    <div class="legend"><span><i style="background:var(--accent)"></i>Average rate paid</span>
+    <span><i style="background:var(--gold)"></i>Market rate today</span>
+    <span><i style="background:var(--gold); opacity:.3; box-shadow:inset 0 0 0 1px var(--gold)"></i>Committed repricing gap</span></div>
+    <div class="gapscale"><div class="gaptrack"></div><div class="gapfill" style="left:17.4%; width:44.7%"></div><div class="marker" style="left:17.4%; --mk:var(--accent)"><span>3.45%</span><small>avg paid</small></div><div class="marker" style="left:62.1%; --mk:var(--gold)"><span>4.73%</span><small>10-year</small></div><div class="marker" style="left:79.1%; --mk:var(--gold)"><span>5.22%</span><small>30-year</small></div><div class="scaleends"><span class="num">2.9%</span><span class="num">5.8%</span></div></div>
+    <figcaption>Roughly $10T of principal rolls every year. Each maturity that rolls
+    moves the average rate paid toward the market rate — the gap is arithmetic
+    already committed, not a forecast.</figcaption></figure>
+  </div>
+  <div class="note"><p>The average rate paid has risen in 6 of the last 7 months, toward a market 10-year of 4.73%. The 1.28pp gap is committed future interest expense, not a forecast.</p></div>
+</section>
+
+<section><div class="sechead"><span class="idx">GAUGE 2</span><h2>Selling relative to demand</h2></div>
+  <p>Dalio's market signature for this stage is rates rising <em>led by the long
+  end</em>. That is a testable claim, so the tracker tests it.</p>
+  <div class="card striped s-warn">
+    <figure><div class="charttitle">US Treasury curve, twelve months apart</div>
+    <div class="chartsub">2025-08-28 versus 2026-08-28, percent</div>
+    <div class="legend"><span><i style="background:var(--accent)"></i>2026-08-28</span>
+    <span><i style="background:var(--gold)"></i>2025-08-28</span></div>
+    <div class="svgwrap"><svg viewBox="0 0 720 260" role="img"
+ aria-label="US Treasury yield curve 2026-08-28 versus 2025-08-28: 1 month 3.84 vs 4.42; 2 year 4.34 vs 3.62; 10 year 4.73 vs 4.22; 30 year 5.22 vs 4.88">
+<line class="ax" x1="52" y1="205" x2="700" y2="205"></line>
+<line class="ax" x1="52" y1="30" x2="52" y2="205"></line>
+<g class="axtext" text-anchor="end"><text x="44" y="167.3">3.9</text><text x="44" y="117.3">4.5</text><text x="44" y="75.7">5.0</text><text x="44" y="34.0">5.5</text></g>
+<g class="ax" stroke-dasharray="2 4" opacity=".55"><line x1="52" y1="163.3" x2="700" y2="163.3"></line><line x1="52" y1="113.3" x2="700" y2="113.3"></line><line x1="52" y1="71.7" x2="700" y2="71.7"></line><line x1="52" y1="30.0" x2="700" y2="30.0"></line></g>
+<polyline fill="none" stroke="var(--gold)" stroke-width="2" stroke-linejoin="round" points="110,120.0 290,186.7 490,136.7 660,81.7"></polyline>
+<g fill="var(--gold)"><circle cx="110" cy="120.0" r="4.5"></circle><circle cx="290" cy="186.7" r="4.5"></circle><circle cx="490" cy="136.7" r="4.5"></circle><circle cx="660" cy="81.7" r="4.5"></circle></g>
+<g class="dotlabel" fill="var(--muted)" text-anchor="middle"><text x="110" y="110.0">4.42</text><text x="290" y="203.7">3.62</text><text x="490" y="153.7">4.22</text><text x="660" y="98.7">4.88</text></g>
+<polyline fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linejoin="round" points="110,168.3 290,126.7 490,94.2 660,53.3"></polyline>
+<g fill="var(--accent)" stroke="var(--surface)" stroke-width="2"><circle cx="110" cy="168.3" r="5.5"></circle><circle cx="290" cy="126.7" r="5.5"></circle><circle cx="490" cy="94.2" r="5.5"></circle><circle cx="660" cy="53.3" r="5.5"></circle></g>
+<g class="dotlabel" text-anchor="middle"><text x="110" y="185.3">3.84</text><text x="290" y="116.7">4.34</text><text x="490" y="84.2">4.73</text><text x="660" y="43.3">5.22</text></g>
+<g class="axtext" text-anchor="middle"><text x="110" y="226">1 month</text><text x="290" y="226">2 year</text><text x="490" y="226">10 year</text><text x="660" y="226">30 year</text></g>
+</svg></div>
+    <figcaption>30-year +34bp over twelve months against the
+    2-year's +72bp. The 30y–2y spread moved
+    126bp → 88bp.</figcaption></figure>
+  </div>
+  <div class="metrics"><div class="metric"><span class="k">30-year</span><span class="v">5.22%</span><span class=s>+34bp over 12 months</span></div><div class="metric"><span class="k">2-year</span><span class="v">4.34%</span><span class=s>+72bp over 12 months</span></div><div class="metric"><span class="k">30y − 2y</span><span class="v">+88bp</span><span class=s>From +126bp a year ago</span></div></div>
+  <div class="note"><p>Dalio's marker for this gauge is rates rising led by the long end. Over 12 months the 30-year rose +34bp against the 2-year's +72bp, and the 30y-2y spread moved 126bp -&gt; 88bp. The marker is NOT confirmed: the short end led.</p></div>
+</section>
+
+<section><div class="sechead"><span class="idx">GAUGE 3</span><h2>Central-bank monetization</h2></div>
+  <p>The gauge that decides which exit the cycle takes.</p>
+  <div class="card striped s-ok"><span class="pill ok">Not triggered</span>
+  <div class="metrics"><div class="metric"><span class="k">Fed balance sheet</span><span class="v">$6.73T</span><span class=s>-24.9% versus peak · -14.8bn on the week</span></div></div>
+  <div class="note"><p>The balance sheet is still contracting. In Dalio's template this is the gauge that decides the exit: pressure with a shrinking central bank is a solvency problem, the same pressure with an expanding one is a currency problem. It has not fired.</p></div>
+  </div>
+</section>
+
+<section><div class="sechead"><span class="idx">MARKER</span><h2>The measuring stick</h2></div>
+  <p>A currency's decline is invisible measured against other currencies that are
+  declining too. Gold rose 32.0% in dollars over twelve months.</p>
+  <div class="card striped s-crit">
+    <figure><div class="charttitle">What each currency lost against gold</div>
+    <div class="chartsub">Twelve months to 2026-08-28</div>
+    <div class="bars"><div class="barrow"><span class="lbl">JPY</span><div class="bartrack"><div class="barfill" style="width:79.4%"></div><div class="barval" style="left:79.4%">-30.3%</div></div></div><div class="barrow"><span class="lbl">EUR</span><div class="bartrack"><div class="barfill" style="width:64.6%"></div><div class="barval" style="left:64.6%">-24.6%</div></div></div><div class="barrow"><span class="lbl">USD</span><div class="bartrack"><div class="barfill" style="width:63.6%"></div><div class="barval" style="left:63.6%">-24.2%</div></div></div><div class="barrow"><span class="lbl">KRW</span><div class="bartrack"><div class="barfill" style="width:61.7%"></div><div class="barval" style="left:61.7%">-23.5%</div></div></div><div class="barrow"><span class="lbl">CNY</span><div class="bartrack"><div class="barfill" style="width:50.8%"></div><div class="barval" style="left:50.8%">-19.4%</div></div></div></div>
+    <figcaption>Measured against each other these currencies barely moved.
+    Measured against gold they devalued together.</figcaption></figure>
+  </div>
+  <div class="card" style="margin-top:18px"><h3 style="margin-bottom:14px">The same assets in two denominators</h3>
+  <div class="scroller"><table class="data"><thead><tr><th>Asset</th><th>Level</th>
+  <th>12m local</th><th>12m in gold</th></tr></thead><tbody>
+  <tr><td>S&P 500</td><td class="n">7,730.99</td><td class="n">+19.3%</td><td class="n" style="color:var(--crit)">-9.6%</td></tr><tr><td>KOSPI</td><td class="n">6,912.37</td><td class="n">+116.9%</td><td class="n" style="color:var(--ok)">+64.3%</td></tr>
+  </tbody></table></div></div>
+</section>
+
+<section><div class="sechead"><span class="idx">MARKER</span><h2>The Korean buffer</h2></div>
+  <p>A US homeowner on a thirty-year fixed mortgage is short the bond: inflation
+  transfers wealth from the lender to them, which is why American housing absorbs
+  a rate shock through volume rather than price. Whether a Korean household has
+  any version of that buffer is a measurable question, and the answer has changed
+  fast.</p>
+
+  <div class="card striped s-crit">
+    <figure><div class="charttitle">Share of new mortgages written at a fixed rate</div>
+    <div class="chartsub">예금은행 주택담보대출, 신규취급액 기준 · monthly to 2026-07</div>
+    <div class="svgwrap"><svg viewBox="0 0 720 210" role="img"
+ aria-label="Share of new Korean mortgages written at a fixed rate, 2024-01-01 to 2026-07-01: peak 96.4% in 2024-07-01, latest 31.9%">
+<g class="axtext" text-anchor="end"><text x="38" y="146.0">25%</text><text x="38" y="104.0">50%</text><text x="38" y="62.0">75%</text><text x="38" y="20.0">100%</text></g><line class="ax" stroke-dasharray="2 4" opacity=".5" x1="46" y1="142.0" x2="706" y2="142.0"></line><line class="ax" stroke-dasharray="2 4" opacity=".5" x1="46" y1="100.0" x2="706" y2="100.0"></line><line class="ax" stroke-dasharray="2 4" opacity=".5" x1="46" y1="58.0" x2="706" y2="58.0"></line><line class="ax" stroke-dasharray="2 4" opacity=".5" x1="46" y1="16.0" x2="706" y2="16.0"></line>
+<polygon points="46,184.0 46.0,29.6 68.0,29.3 90.0,29.8 112.0,26.9 134.0,27.1 156.0,24.6 178.0,22.0 200.0,22.6 222.0,25.4 244.0,34.0 266.0,47.2 288.0,47.4 310.0,34.6 332.0,33.6 354.0,35.8 376.0,33.6 398.0,30.1 420.0,31.8 442.0,34.8 464.0,35.3 486.0,30.3 508.0,26.1 530.0,32.5 552.0,38.5 574.0,57.0 596.0,64.6 618.0,81.9 640.0,103.7 662.0,114.1 684.0,120.7 706.0,130.4 706.0,184.0" fill="var(--accent)" opacity=".12"></polygon>
+<polyline points="46.0,29.6 68.0,29.3 90.0,29.8 112.0,26.9 134.0,27.1 156.0,24.6 178.0,22.0 200.0,22.6 222.0,25.4 244.0,34.0 266.0,47.2 288.0,47.4 310.0,34.6 332.0,33.6 354.0,35.8 376.0,33.6 398.0,30.1 420.0,31.8 442.0,34.8 464.0,35.3 486.0,30.3 508.0,26.1 530.0,32.5 552.0,38.5 574.0,57.0 596.0,64.6 618.0,81.9 640.0,103.7 662.0,114.1 684.0,120.7 706.0,130.4" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linejoin="round"></polyline>
+<circle cx="178.0" cy="22.0" r="4" fill="var(--muted)"></circle>
+<text class="dotlabel" fill="var(--muted)" text-anchor="middle" x="178.0" y="12.0">96.4%</text>
+<circle cx="706.0" cy="130.4" r="5.5" fill="var(--crit)" stroke="var(--surface)" stroke-width="2"></circle>
+<text class="dotlabel" fill="var(--crit)" text-anchor="end" x="696.0" y="134.4">31.9%</text>
+<line class="ax" x1="46" y1="184" x2="706" y2="184"></line>
+<g class="axtext" text-anchor="middle"><text x="46.0" y="202">2024-01</text><text x="266.0" y="202">2024-11</text><text x="486.0" y="202">2025-09</text><text x="706.0" y="202">2026-07</text></g>
+</svg></div>
+    <figcaption>Fixed-rate lending has fallen from 96.4% of new
+    mortgages in 2024-07 to 31.9% — most of the
+    decline in the last eight months, as the Bank of Korea began tightening. Note
+    that Korean 고정형 is typically 혼합형: fixed for five years, then floating. The
+    buffer is real but far shorter-dated than the US thirty-year.</figcaption></figure>
+  </div>
+
+  <div class="metrics"><div class="metric"><span class="k">Fixed share, new loans</span><span class="v">31.9%</span><span class=s>From 88.8% a year ago</span></div><div class="metric"><span class="k">Fixed premium</span><span class="v">+0.41pp</span><span class=s>고정 4.76% vs 변동 4.35%</span></div><div class="metric"><span class="k">BOK base rate</span><span class="v">2.75%</span><span class=s>As of 2026-07</span></div><div class="metric"><span class="k">가계신용</span><span class="v">2,020조</span><span class=s>As of 2026-04</span></div></div>
+
+  <div class="note"><p>The premium flipped sign. Through 2025 fixed-rate mortgages
+  were <em>cheaper</em> than floating and roughly nine in ten new borrowers took
+  them; fixed now costs +0.41pp more and fewer than one in three
+  do. Lenders are pricing the rate path before borrowers are — which is what the
+  withdrawal of a buffer looks like while it is happening.</p></div>
+
+  <div class="grid g2" style="margin-top:18px">
+    <div class="card striped s-crit"><h3 style="margin-bottom:12px">Japan</h3>
+    <div class="metrics"><div class="metric"><span class="k">10-year JGB</span><span class="v">2.67%</span><span class=s>+125bp over 12 months · monthly, to 2026-06</span></div></div>
+    <p style="font-size:14px;margin-bottom:0">Japan carries roughly 215% debt-to-GDP
+    on the assumption that yields stay near zero. Rising JGB yields turn Dalio's
+    Q7 argument from theory into arithmetic.</p></div>
+
+    <div class="card striped s-warn"><h3 style="margin-bottom:12px">Seoul housing</h3>
+    <p style="font-size:14px">Apartments +0.22% in the week to
+    2026-08-17, rotating rather than rising uniformly:
+    강남 -0.05% and 서초 -0.09% against
+    강북 14개구 +0.30%. 전세 +0.19%.</p>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:0">Hand-entered from
+    한국부동산원; the R-ONE API is not yet wired.</p></div>
+  </div>
+</section>
+
+<footer><p>Gauge definitions from Ray Dalio, <em>How Countries Go Broke: The Big
+Cycle</em> (2025). Readings computed from US Treasury, Federal Reserve, ECB and
+Bank of Korea primary sources. A monitor, not a forecast, and not investment
+advice.</p></footer>
+</div>
+</body></html>
