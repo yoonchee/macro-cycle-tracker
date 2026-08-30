@@ -101,15 +101,27 @@ def series(name, since=None):
         return [(r["date"], r["value"]) for r in c.execute(q, args)]
 
 
-def as_of_a_year_ago(name, ref_date):
-    """Closest observation at or before (ref_date - 1 year). Returns (date, value)."""
+def as_of_years_ago(name, ref_date, years=1):
+    """Closest observation at or before (ref_date - `years`). Returns (date, value)."""
     from datetime import date as _d
     y, m, d = (int(x) for x in str(ref_date)[:10].split("-"))
     try:
-        target = _d(y - 1, m, d)
+        target = _d(y - years, m, d)
     except ValueError:            # 29 Feb
-        target = _d(y - 1, m, d - 1)
+        target = _d(y - years, m, d - 1)
     return latest(name, on_or_before=target.isoformat())
+
+
+def as_of_a_year_ago(name, ref_date):
+    return as_of_years_ago(name, ref_date, 1)
+
+
+def monthly(name, since=None):
+    """Last observation of each calendar month — a weekly series read as a trend."""
+    out = {}
+    for date, value in series(name, since=since):
+        out[date[:7]] = (date, value)
+    return [out[k] for k in sorted(out)]
 
 
 def coverage():

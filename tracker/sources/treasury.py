@@ -127,9 +127,14 @@ def mts_summary(n=400):
     return out
 
 
+# Four calendar years, so a three-year-ago comparison always has a full year of
+# data behind it even in January.
+YEARS_KEPT = 4
+
+
 def yield_curve(years=None):
     """Daily par yield curve. Dalio's 'long end leading' marker lives here."""
-    years = years or [dt.date.today().year, dt.date.today().year - 1]
+    years = years or [dt.date.today().year - i for i in range(YEARS_KEPT)]
     tenors = {"1 Mo": "m1", "2 Yr": "y2", "5 Yr": "y5", "10 Yr": "y10", "30 Yr": "y30"}
     out = []
     for y in years:

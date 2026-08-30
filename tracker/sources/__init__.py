@@ -11,6 +11,7 @@ REGISTRY_SPEC = {
     "fred":     ("fred", "fetch_all"),      # needs FRED_API_KEY
     "market":   ("market", "fetch_all"),    # yfinance, no key
     "korea":    ("korea", "fetch_all"),     # needs ECOS_API_KEY
+    "japan":    ("japan", "fetch_all"),     # MOF JGB curve, no key
 }
 
 

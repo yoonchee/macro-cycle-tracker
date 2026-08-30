@@ -14,8 +14,9 @@ SERIES = {
     "WALCL":   "us.fed.balance_sheet",      # total Fed assets, weekly, $mn
     "WSHOSHO": "us.fed.soma_treasuries",    # SOMA Treasury holdings
     "RESPPLLOPNWW": "us.fed.deferred_asset",# the Fed's own losses — the tell
-    # Japan — the template already running (Dalio's Q7)
-    "IRLTLT01JPM156N": "jp.jgb10",          # 10-year JGB, monthly
+    # Japan used to be read here as a monthly 10-year (IRLTLT01JPM156N). It now
+    # comes from MOF directly — see sources/japan.py — because Dalio's Q7
+    # argument is about the shape of the curve, not one point on it.
     # Context
     "CPIAUCSL": "us.cpi",
     "GDP":      "us.gdp",

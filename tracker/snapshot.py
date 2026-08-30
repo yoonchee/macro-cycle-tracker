@@ -1,9 +1,8 @@
 """Build data/snapshot.json from the SQLite store.
 
 This is the bridge between `refresh.py` (fills the store) and `build.py` (renders
-the page). Everything the store can answer is derived here; the handful of
-figures no wired API serves — the 한국부동산원 weekly apartment numbers — are read
-from data/manual.json and merged on top.
+the page). Everything the store can answer is derived here; anything no wired
+API serves is read from data/manual.json and merged on top.
 
     python -m tracker.snapshot            # write data/snapshot.json
     python -m tracker.snapshot --dry-run  # print it instead
@@ -11,6 +10,11 @@ from data/manual.json and merged on top.
 A series that is missing or stale does not silently become zero: `pick` raises,
 and `main` reports which key failed. A dashboard rendered from a partial refresh
 is worse than one that fails loudly.
+
+The snapshot carries paths, not just points. Every gauge on the page is a claim
+about a *direction*, and a single reading cannot be argued with — so the window
+below is three years everywhere, wide enough to contain the 2023 rate shock and
+narrow enough that the current move is still legible.
 """
 import argparse
 import datetime as dt
@@ -21,13 +25,19 @@ from .config import SNAPSHOT, DATA
 
 MANUAL = DATA / "manual.json"
 
+WINDOW_YEARS = 3        # history carried onto the page
+FED_WINDOW_YEARS = 5    # two extra, so the 2022 QT peak stays in frame
+
 # How stale a series may be before we refuse to build. Fiscal and ECOS releases
 # lag by design; market data should be within days.
 MAX_AGE_DAYS = {
     "mkt.": 7, "fx.": 7, "us.ust.": 7, "us.debt.": 10,
     "us.fed.": 21, "us.receipts.": 75, "us.outlays.": 75, "us.deficit.": 75,
-    "us.interest.": 75, "kr.": 200, "jp.": 120,
+    "us.interest.": 75, "kr.housing.": 120, "kr.": 200, "jp.": 10,
 }
+
+UST_TENORS = ("m1", "y2", "y10", "y30")
+JGB_TENORS = ("y1", "y2", "y10", "y30")
 
 
 def _max_age(series):
@@ -51,11 +61,40 @@ def pick(series, on_or_before=None, required=True):
     return date, value
 
 
-def year_ago(series, ref):
-    date, value = store.as_of_a_year_ago(series, ref)
+def years_ago(series, ref, n=1):
+    date, value = store.as_of_years_ago(series, ref, n)
     if value is None:
-        raise KeyError(f"{series}: no observation near {ref} minus one year")
+        raise KeyError(f"{series}: no observation near {ref} minus {n} year(s)")
     return date, value
+
+
+def _since(ref, years):
+    y, m, d = (int(x) for x in str(ref)[:10].split("-"))
+    try:
+        return dt.date(y - years, m, d).isoformat()
+    except ValueError:
+        return dt.date(y - years, m, d - 1).isoformat()
+
+
+def curve(prefix, tenors, ref=None):
+    """A yield curve today, twelve months back and three years back.
+
+    Three dates rather than two because the twelve-month comparison alone cannot
+    distinguish a curve that is still repricing from one that repriced in 2023
+    and has been flat since — and those imply opposite things about demand.
+    """
+    ref = ref or pick(f"{prefix}.{tenors[-1]}")[0]
+    out = {}
+    for label, back in (("now", 0), ("yr_ago", 1), ("yr3_ago", WINDOW_YEARS)):
+        row = {}
+        for tag in tenors:
+            if back == 0:
+                d0, v0 = pick(f"{prefix}.{tag}", on_or_before=ref)
+            else:
+                d0, v0 = years_ago(f"{prefix}.{tag}", ref, back)
+            row["date"], row[tag] = d0, v0
+        out[label] = row
+    return out
 
 
 def _fiscal_months(record_date):
@@ -64,17 +103,18 @@ def _fiscal_months(record_date):
     return (d.month - 10) % 12 + 1
 
 
+def _rebased(points):
+    """Index path rescaled so the first observation is 100."""
+    base = points[0][1]
+    return [(d, v / base * 100) for d, v in points]
+
+
 def build():
     # --- rates ---------------------------------------------------------------
     ref, y30 = pick("us.ust.y30")
-    yields_now = {"date": ref}
-    yields_ago = {}
-    for tag in ("m1", "y2", "y5", "y10", "y30"):
-        _, v = pick(f"us.ust.{tag}", on_or_before=ref)
-        yields_now[tag] = v
-        d0, v0 = year_ago(f"us.ust.{tag}", ref)
-        yields_ago[tag] = v0
-        yields_ago["date"] = d0
+    ust = curve("us.ust", UST_TENORS, ref)
+    yields_now, yields_ago = ust["now"], ust["yr_ago"]
+    since = _since(ref, WINDOW_YEARS)
 
     # 30-year high over the trailing quarter — context for "eased from"
     recent = store.series("us.ust.y30",
@@ -91,18 +131,23 @@ def build():
     avg_rate_series = store.series("us.debt.avg_rate")[-8:]
 
     # --- fed -----------------------------------------------------------------
+    # WALCL is weekly. The page reads it monthly: at this horizon the weekly
+    # print is noise, and the question Gauge 3 asks — has the balance sheet
+    # stopped shrinking — is a question about the slope of the last two years.
     fdate, fed = pick("us.fed.balance_sheet")
     hist = store.series("us.fed.balance_sheet")
     prior = hist[-2][1] if len(hist) > 1 else fed
     peak_date, peak = max(hist, key=lambda r: r[1])
+    fed_monthly = store.monthly("us.fed.balance_sheet", since=_since(fdate, FED_WINDOW_YEARS))
+    _, fed_yr_ago = years_ago("us.fed.balance_sheet", fdate, 1)
 
     # --- market --------------------------------------------------------------
     gdate, gold = pick("mkt.gold_usd")
-    _, gold0 = year_ago("mkt.gold_usd", gdate)
+    _, gold0 = years_ago("mkt.gold_usd", gdate)
     market = {"gold_usd_oz": gold, "gold_usd_oz_yr_ago": gold0, "gold_date": gdate}
     for key, series in (("spx", "mkt.spx"), ("kospi", "mkt.kospi")):
         d, v = pick(series)
-        _, v0 = year_ago(series, d)
+        _, v0 = years_ago(series, d)
         market[key] = v
         market[f"{key}_yoy_pct"] = (v / v0 - 1) * 100
 
@@ -110,15 +155,16 @@ def build():
     for code, series, invert in (("KRW", "fx.usdkrw", False), ("JPY", "fx.usdjpy", False),
                                  ("CNY", "fx.usdcny", False), ("EUR", "fx.eurusd", True)):
         d, v = pick(series)
-        _, v0 = year_ago(series, d)
+        _, v0 = years_ago(series, d)
         fx_now[code] = 1 / v if invert else v
         fx_ago[code] = 1 / v0 if invert else v0
     market["fx_now"], market["fx_yr_ago"] = fx_now, fx_ago
 
-    # --- asia ----------------------------------------------------------------
-    jdate, jgb10 = pick("jp.jgb10")
-    _, jgb10_0 = year_ago("jp.jgb10", jdate)
+    # --- japan ---------------------------------------------------------------
+    jdate = pick("jp.jgb.y10")[0]
+    jgb = curve("jp.jgb", JGB_TENORS, jdate)
 
+    # --- korea ---------------------------------------------------------------
     kr = {}
     for key, series in (("base_rate", "kr.base_rate"), ("cpi_index", "kr.cpi"),
                         ("mortgage_rate", "kr.mortgage_rate"),
@@ -129,19 +175,56 @@ def build():
         d, v = pick(series)
         kr[key] = v
         kr[f"{key}_date"] = d
-    _, share0 = year_ago("kr.mortgage.fixed_share", kr["fixed_share_date"])
-    share_hist = store.series("kr.mortgage.fixed_share")
+
+    kr_since = _since(kr["fixed_share_date"], WINDOW_YEARS)
+    _, share0 = years_ago("kr.mortgage.fixed_share", kr["fixed_share_date"])
+    share_hist = store.series("kr.mortgage.fixed_share", since=kr_since)
     peak_share_date, peak_share = max(share_hist, key=lambda r: r[1])
+    # 가계신용 is quarterly and 신규취급 고정비중 is monthly; they share an axis of
+    # time, not of units, so both paths are carried and build.py scales them
+    # against their own axes.
+    credit_hist = store.series("kr.household_credit", since=kr_since)
     kr.update({
         "fixed_share_yr_ago": share0,
         "fixed_share_peak": peak_share, "fixed_share_peak_date": peak_share_date,
         "fixed_premium_pp": kr["mortgage_fixed"] - kr["mortgage_floating"],
-        "fixed_share_series": [(d, v) for d, v in share_hist if d >= "2024-01-01"],
+        "fixed_share_series": [list(r) for r in share_hist],
+        "household_credit_series": [list(r) for r in credit_hist],
+        "household_credit_chg_pct": (credit_hist[-1][1] / credit_hist[0][1] - 1) * 100,
     })
+
+    # 한국부동산원 monthly indices, rebased so four different base months can be
+    # read on one axis. The comparison is the point: 매매 against 전세 against
+    # 월세 says whether a price move is being paid for out of rent or out of
+    # leverage, and the 실거래 index says whether the survey is keeping up with
+    # what buyers actually transacted at.
+    hdate = pick("kr.housing.seoul_sale")[0]
+    h_since = _since(hdate, WINDOW_YEARS)
+    housing = {"date": hdate, "series": {}, "chg_pct": {}, "level": {}}
+    for key, series in (("real", "kr.housing.seoul_real"),
+                        ("sale", "kr.housing.seoul_sale"),
+                        ("jeonse", "kr.housing.seoul_jeonse"),
+                        ("wolse", "kr.housing.seoul_wolse")):
+        points = store.series(series, since=h_since)
+        if not points:
+            raise KeyError(f"{series}: nothing in the last {WINDOW_YEARS} years")
+        rebased = _rebased(points)
+        housing["series"][key] = [list(r) for r in rebased]
+        housing["chg_pct"][key] = rebased[-1][1] - 100
+        housing["level"][key] = points[-1][1]
+    housing["window"] = [housing["series"]["sale"][0][0], hdate]
+    # Deliberately a gap in percentage points, not a 전세가율. These indices carry
+    # a common base month, so their ratio is a relative reading and would be
+    # misread as the ~50% 전세-to-price level that 전세가율 actually means.
+    housing["jeonse_lag_pp"] = housing["chg_pct"]["sale"] - housing["chg_pct"]["jeonse"]
+    housing["wolse_lag_pp"] = housing["chg_pct"]["jeonse"] - housing["chg_pct"]["wolse"]
+    housing["survey_gap_pp"] = housing["chg_pct"]["real"] - housing["chg_pct"]["sale"]
+    kr["housing"] = housing
 
     snap = {
         "as_of": ref,
         "generated": dt.date.today().isoformat(),
+        "window_years": WINDOW_YEARS,
         "us_fiscal": {
             "fytd_months": _fiscal_months(idate),
             "fytd_receipts": receipts, "fytd_outlays": outlays,
@@ -151,13 +234,19 @@ def build():
             "debt_date": ddate,
             "avg_rate_series": [list(r) for r in avg_rate_series],
         },
-        "yields": {"now": yields_now, "yr_ago": yields_ago,
-                   "recent_30y_high": {"date": hi_date, "y30": hi}},
+        "yields": {"now": yields_now, "yr_ago": yields_ago, "yr3_ago": ust["yr3_ago"],
+                   "recent_30y_high": {"date": hi_date, "y30": hi},
+                   "since": since},
         "fed": {"balance_sheet_usd_mn": fed, "prior_week_usd_mn": prior,
-                "date": fdate, "peak_usd_mn": peak, "peak_date": peak_date},
+                "date": fdate, "peak_usd_mn": peak, "peak_date": peak_date,
+                "yr_ago_usd_mn": fed_yr_ago,
+                "monthly": [list(r) for r in fed_monthly]},
         "market": market,
         "asia": {
-            "japan": {"jgb10": jgb10, "jgb10_chg_12m": jgb10 - jgb10_0, "date": jdate},
+            "japan": {"yields": jgb, "jgb10": jgb["now"]["y10"],
+                      "jgb10_chg_12m": jgb["now"]["y10"] - jgb["yr_ago"]["y10"],
+                      "jgb30_chg_12m": jgb["now"]["y30"] - jgb["yr_ago"]["y30"],
+                      "date": jdate},
             "korea": kr,
         },
     }
