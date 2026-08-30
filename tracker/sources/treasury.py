@@ -6,6 +6,8 @@ Daily yield curve:     https://home.treasury.gov/interest-rates-data-csv-archive
 import csv
 import io
 import datetime as dt
+import time
+
 import requests
 
 from ..config import UA, TIMEOUT
@@ -36,7 +38,18 @@ def _get(path, **params):
     return r.json().get("data", [])
 
 
-def _paged(path, page_size=10000, **params):
+# Bulk MSPD queries are tens of thousands of rows. Deliberately many small pages
+# rather than a few large ones: requests' read timeout only fires on a *gap* in
+# the stream, so a large response arriving as a slow trickle — which is what a
+# throttled datacenter IP gets — can hang far past any timeout while a small one
+# either lands or fails fast.
+BULK_TIMEOUT = (10, 45)     # (connect, read)
+BULK_PAGE = 2000
+BULK_RETRIES = 3
+MAX_PAGES = 60              # a stuck total-pages must not become an endless loop
+
+
+def _paged(path, page_size=BULK_PAGE, **params):
     """Every page, not just the first.
 
     MSPD table 3 is one row per CUSIP, so a single month is ~700 rows and a page
@@ -45,15 +58,25 @@ def _paged(path, page_size=10000, **params):
     happened to fit — which looks like a plausible number, not like an error.
     """
     out, page = [], 1
-    while True:
-        r = requests.get(f"{FISCAL}{path}", headers=UA, timeout=TIMEOUT,
-                         params={**params, "page[size]": page_size, "page[number]": page})
-        r.raise_for_status()
-        body = r.json()
+    while page <= MAX_PAGES:
+        body = None
+        for attempt in range(BULK_RETRIES):
+            try:
+                r = requests.get(
+                    f"{FISCAL}{path}", headers=UA, timeout=BULK_TIMEOUT,
+                    params={**params, "page[size]": page_size, "page[number]": page})
+                r.raise_for_status()
+                body = r.json()
+                break
+            except requests.RequestException:
+                if attempt == BULK_RETRIES - 1:
+                    raise
+                time.sleep(2 ** attempt)
         out += body.get("data", [])
         if page >= (body.get("meta", {}).get("total-pages") or 1):
             return out
         page += 1
+    raise RuntimeError(f"{path}: still paging after {MAX_PAGES} pages")
 
 
 def debt_to_penny(n=400):
@@ -213,7 +236,7 @@ def maturity_profile(years=MSPD_YEARS):
 
 def marketable_mix(years=MSPD_YEARS):
     """Bills as a share of marketable debt — the fastest-moving shortening tell."""
-    rows = _paged("/v1/debt/mspd/mspd_table_1", page_size=5000,
+    rows = _paged("/v1/debt/mspd/mspd_table_1",
                   filter=f"record_date:gte:{_since(years)}",
                   fields="record_date,security_type_desc,security_class_desc,total_mil_amt",
                   sort="-record_date")
