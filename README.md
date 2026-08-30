@@ -6,6 +6,9 @@ measures it. This repo takes him at his word: it fetches the series his three
 gauges are defined on, scores them against stated thresholds, and renders a
 dashboard.
 
+**Live dashboard: <https://yoonchee.github.io/macro-cycle-tracker/>** — rebuilt
+weekly by GitHub Actions.
+
 It is built to disagree with him where the data does — and on the current
 reading it does exactly that on one of his named markers. See *What it found*.
 
