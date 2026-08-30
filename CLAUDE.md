@@ -13,8 +13,8 @@ Gauge definitions come from *How Countries Go Broke: The Big Cycle* (2025).
 - `tracker/gauges.py` — **the opinionated file.** All thresholds live at the top
   as named constants. This is the file to argue with.
 - `tracker/snapshot.py` — derives `data/snapshot.json` from the store. Carries
-  three-year *paths*, not just latest points, because every gauge is a claim
-  about a direction. Raises on a missing or stale series rather than writing
+  *paths*, not just latest points, because every gauge is a claim about a
+  direction. Raises on a missing or stale series rather than writing
   zeros.
 - `build.py` — renders `data/snapshot.json` into `out/monitor.html`. Chart
   geometry is computed from the data, never hand-placed. Two primitives:
@@ -31,14 +31,15 @@ Gauge definitions come from *How Countries Go Broke: The Big Cycle* (2025).
   `fx.usdkrw`, `kr.base_rate`, `mkt.gold_usd`, `jp.jgb.y30`.
 - Read gauges over a window, not a print. Anything that swings on operational
   noise — the weekly H.4.1 especially — gets scored on a slope whose length is a
-  named constant in `gauges.py`. A one-week test of Gauge 3 reported "still
-  contracting" for three quarters after the balance sheet had turned.
+  named constant in `gauges.py`. A single print is not evidence of direction.
 - Fiscal figures are annualized from fiscal-year-to-date actuals, never
   projected. Any annualization must state the month count it came from.
 - Every asset that matters gets reported in two denominators: local currency and
   gold. That comparison is the point of the framework, not a garnish.
 - Where a horizon changes the answer, publish both horizons. Gauge 2's long-end
-  marker fails over twelve months and passes over three years; the page says so.
+  marker fails over twelve months and passes over two years; the page says so.
+- Curves are compared at annual snapshots — today, y−1, y−2 (`CURVE_LOOKBACK` in
+  `snapshot.py`). Time-series paths use their own, longer window.
 - If a marker Dalio names is **not** confirmed by the data, say so on the page.
   The tracker exists to discipline the narrative, not to illustrate it.
 

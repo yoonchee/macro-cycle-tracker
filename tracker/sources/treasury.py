@@ -127,7 +127,7 @@ def mts_summary(n=400):
     return out
 
 
-# Four calendar years, so a three-year-ago comparison always has a full year of
+# Four calendar years, so a two-years-back comparison always has a full year of
 # data behind it even in January.
 YEARS_KEPT = 4
 

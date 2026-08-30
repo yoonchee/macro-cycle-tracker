@@ -194,10 +194,15 @@ def curve_chart(rows, tenors, aria="", W=720, H=262):
     case — never collide.
     """
     vals = [v[k] for v, _, _ in rows for k, _ in tenors]
-    lo, hi, ticks = _axis(min(vals) - 0.35, max(vals) + 0.35, 4)
-    PAD_L, PAD_R, TOP, BOT = 52, 18, 34, H - 56
+    # Pad proportionally, not by a fixed amount: a JGB curve spanning 0.3-4.0 and
+    # a UST curve spanning 3.6-5.5 need different headroom, and a fixed pad drags
+    # the axis to a round number far below anything actually plotted.
+    pad = max((max(vals) - min(vals)) * 0.06, 0.08)
+    lo, hi, ticks = _axis(min(vals) - pad, max(vals) + pad, 5)
+    PAD_L, PAD_R, TOP, BOT = 52, 26, 34, H - 56
+    INSET = 22          # keeps the first tenor's value label off the axis labels
     n = len(tenors)
-    X = lambda i: PAD_L + i / max(n - 1, 1) * (W - PAD_L - PAD_R)
+    X = lambda i: PAD_L + INSET + i / max(n - 1, 1) * (W - PAD_L - INSET - PAD_R)
     Y = lambda v: BOT - (v - lo) / (hi - lo) * (BOT - TOP)
 
     grid = "".join(f'<line class="ax" stroke-dasharray="2 4" opacity=".5" x1="{PAD_L}" '
@@ -273,7 +278,7 @@ def gold_bars(currencies):
 # --- page -------------------------------------------------------------------
 UST_TENORS = [("m1", "1 month"), ("y2", "2 year"), ("y10", "10 year"), ("y30", "30 year")]
 JGB_TENORS = [("y1", "1 year"), ("y2", "2 year"), ("y10", "10 year"), ("y30", "30 year")]
-CURVE_STYLE = [("yr3_ago", "muted", {"width": 1.8, "r": 3.6, "dash": True}),
+CURVE_STYLE = [("yr2_ago", "muted", {"width": 1.8, "r": 3.6, "dash": True}),
                ("yr_ago", "gold", {"width": 2.1, "r": 4.2}),
                ("now", "accent", {"width": 2.8, "r": 5.4})]
 
@@ -281,7 +286,7 @@ CURVE_STYLE = [("yr3_ago", "muted", {"width": 1.8, "r": 3.6, "dash": True}),
 def curve_block(curves, tenors, what):
     rows = [(curves[key], colour, style) for key, colour, style in CURVE_STYLE]
     aria = "; ".join(
-        f'{label} {curves["yr3_ago"][k]:.2f} in {curves["yr3_ago"]["date"]}, '
+        f'{label} {curves["yr2_ago"][k]:.2f} in {curves["yr2_ago"]["date"]}, '
         f'{curves["yr_ago"][k]:.2f} in {curves["yr_ago"]["date"]}, '
         f'{curves["now"][k]:.2f} in {curves["now"]["date"]}' for k, label in tenors)
     return curve_chart(rows, tenors, aria=f"{what} yield curve. {aria}")
@@ -293,8 +298,9 @@ def render(s):
     m1, m2, m3 = g1.metrics, g2.metrics, g3.metrics
     gold = r["gold"]
     kr, jp = s["asia"]["korea"], s["asia"]["japan"]
-    ny, ay, a3 = s["yields"]["now"], s["yields"]["yr_ago"], s["yields"]["yr3_ago"]
-    hz = s.get("window_years", 3)
+    ny, ay, a2 = s["yields"]["now"], s["yields"]["yr_ago"], s["yields"]["yr2_ago"]
+    cz = s.get("curve_years", 2)        # span of the curve comparisons
+    hz = s.get("window_years", 3)       # span of the time-series paths
     hs = kr["housing"]
     fed = s["fed"]
     jy = jp["yields"]
@@ -391,29 +397,30 @@ def render(s):
 <section>{sechead("GAUGE 2", "Selling relative to demand")}
   <p>Dalio's market signature for this stage is rates rising <em>led by the long
   end</em>. That is a testable claim, so the tracker tests it — on twelve months
-  and on {hz} years, because the two horizons currently disagree.</p>
+  and on {cz} years, because the two horizons currently disagree.</p>
   <div class="card striped s-{PILL[g2.status]}">
     <figure>{chart_head("US Treasury curve, three dates",
-        f'{a3["date"]} · {ay["date"]} · {ny["date"]}, percent')}
+        f'{a2["date"]} · {ay["date"]} · {ny["date"]}, percent')}
     {legend(("accent", ny["date"]), ("gold", ay["date"]),
-            ("muted", a3["date"], "dashed"))}
+            ("muted", a2["date"], "dashed"))}
     {curve_block(s["yields"], UST_TENORS, "US Treasury")}
-    <figcaption>Read left to right, the curve un-inverted. Three years ago the
-    2-year paid {a3["y2"]:.2f}% against the 30-year's {a3["y30"]:.2f}% — money was
-    dearest at the front. Today the 30-year pays {ny["y30"]:.2f}% and the 2-year
-    {ny["y2"]:.2f}%. Over {hz} years the long end rose {m2["d30_3y_bp"]:+.0f}bp
-    against the 2-year's {m2["d2_3y_bp"]:+.0f}bp; over the last twelve,
-    {m2["d30_bp"]:+.0f}bp against {m2["d2_bp"]:+.0f}bp.</figcaption></figure>
+    <figcaption>Read left to right, the curve un-inverted. Two years ago the
+    2-year paid {a2["y2"]:.2f}% against the 30-year's {a2["y30"]:.2f}% — barely any
+    reward for lending thirty years instead of two. Today the 30-year pays
+    {ny["y30"]:.2f}% and the 2-year {ny["y2"]:.2f}%. Over {cz} years the long end
+    rose {m2["d30_2y_bp"]:+.0f}bp against the 2-year's {m2["d2_2y_bp"]:+.0f}bp;
+    over the last twelve, {m2["d30_bp"]:+.0f}bp against
+    {m2["d2_bp"]:+.0f}bp.</figcaption></figure>
   </div>
   {metrics(
       metric("30-year", f"{m2['y30']:.2f}%",
-             f"{m2['d30_bp']:+.0f}bp over 12m · {m2['d30_3y_bp']:+.0f}bp over {hz}y"),
+             f"{m2['d30_bp']:+.0f}bp over 12m · {m2['d30_2y_bp']:+.0f}bp over {cz}y"),
       metric("2-year", f"{m2['y2']:.2f}%",
-             f"{m2['d2_bp']:+.0f}bp over 12m · {m2['d2_3y_bp']:+.0f}bp over {hz}y"),
+             f"{m2['d2_bp']:+.0f}bp over 12m · {m2['d2_2y_bp']:+.0f}bp over {cz}y"),
       metric("30y − 2y", f"{m2['curve_bp']:+.0f}bp",
-             f"{m2['curve_bp_3y_ago']:+.0f}bp {hz}y ago · {m2['curve_bp_ago']:+.0f}bp a year ago"),
-      metric(f"Long end led, {hz}y", "Yes" if m2["long_end_leads_3y"] else "No",
-             f"By {m2['d30_3y_bp'] - m2['d2_3y_bp']:+.0f}bp · "
+             f"{m2['curve_bp_2y_ago']:+.0f}bp {cz}y ago · {m2['curve_bp_ago']:+.0f}bp a year ago"),
+      metric(f"Long end led, {cz}y", "Yes" if m2["long_end_leads_2y"] else "No",
+             f"By {m2['d30_2y_bp'] - m2['d2_2y_bp']:+.0f}bp · "
              f"{m2['d30_bp'] - m2['d2_bp']:+.0f}bp over 12m"))}
   {notes(g2)}
 </section>
@@ -442,9 +449,8 @@ def render(s):
     <figcaption>The shape is the reading, and the shape changed. Quantitative
     tightening took ${(fed["peak_usd_mn"] - m3["trough"])/1e6:.2f}T off the balance
     sheet between {fed["peak_date"][:7]} and {m3["trough_date"][:7]}; since then the
-    line has turned and risen {m3["since_trough_pct"]:+.1f}%. A single week's print
-    would not show that in either direction — this is the reading the previous
-    version of this page got wrong by testing week over week.</figcaption></figure>
+    line has turned and risen {m3["since_trough_pct"]:+.1f}%. Nine months of slope,
+    not one week of print.</figcaption></figure>
   {notes(g3)}
   </div>
 </section>
@@ -543,14 +549,14 @@ def render(s):
   curve rather than as a single 10-year print.</p>
   <div class="card striped s-crit">
     <figure>{chart_head("JGB curve, three dates",
-        f'{jy["yr3_ago"]["date"]} · {jy["yr_ago"]["date"]} · {jy["now"]["date"]}, percent')}
+        f'{jy["yr2_ago"]["date"]} · {jy["yr_ago"]["date"]} · {jy["now"]["date"]}, percent')}
     {legend(("accent", jy["now"]["date"]), ("gold", jy["yr_ago"]["date"]),
-            ("muted", jy["yr3_ago"]["date"], "dashed"))}
+            ("muted", jy["yr2_ago"]["date"], "dashed"))}
     {curve_block(jy, JGB_TENORS, "Japanese government bond")}
-    <figcaption>Three years ago the 2-year JGB paid {jy["yr3_ago"]["y2"]:.2f}% and the
-    30-year {jy["yr3_ago"]["y30"]:.2f}%. Today they pay {jy["now"]["y2"]:.2f}% and
+    <figcaption>Two years ago the 2-year JGB paid {jy["yr2_ago"]["y2"]:.2f}% and the
+    30-year {jy["yr2_ago"]["y30"]:.2f}%. Today they pay {jy["now"]["y2"]:.2f}% and
     {jy["now"]["y30"]:.2f}%. The 30-year has risen
-    {(jy["now"]["y30"] - jy["yr3_ago"]["y30"])*100:+.0f}bp over {hz} years and
+    {(jy["now"]["y30"] - jy["yr2_ago"]["y30"])*100:+.0f}bp over {cz} years and
     {jp["jgb30_chg_12m"]*100:+.0f}bp over twelve months — a bond market that spent a
     generation at zero repricing duration in public. Source: 財務省 daily par
     yields, the issuer's own numbers.</figcaption></figure>
@@ -561,13 +567,13 @@ def render(s):
       metric("10-year JGB", f"{jy['now']['y10']:.2f}%",
              f"{jp['jgb10_chg_12m']*100:+.0f}bp over 12 months"),
       metric("30y − 2y", f"{(jy['now']['y30'] - jy['now']['y2'])*100:+.0f}bp",
-             f"From {(jy['yr3_ago']['y30'] - jy['yr3_ago']['y2'])*100:+.0f}bp {hz} years ago"),
+             f"From {(jy['yr2_ago']['y30'] - jy['yr2_ago']['y2'])*100:+.0f}bp {cz} years ago"),
       metric("As of", jy["now"]["date"], "Daily, 財務省"))}
   <div class="note"><p>Dalio's Q7 asks what happens when the country that proved
   large debts can be carried cheaply stops being able to. The US 30-year is
   {ny['y30']:.2f}% and the JGB 30-year is {jy['now']['y30']:.2f}%. The gap between
   them has closed to {(ny['y30'] - jy['now']['y30'])*100:.0f}bp from
-  {(a3['y30'] - jy['yr3_ago']['y30'])*100:.0f}bp {hz} years ago — which is the
+  {(a2['y30'] - jy['yr2_ago']['y30'])*100:.0f}bp {cz} years ago — which is the
   hedged-yield arithmetic that has historically sent Japanese capital abroad,
   running in reverse.</p></div>
 </section>

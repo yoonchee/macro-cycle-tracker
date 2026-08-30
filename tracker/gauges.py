@@ -27,13 +27,16 @@ AVG_RATE_CRITICAL = 4.0
 # Gauge 2: the curve. Dalio's marker is rates rising *led by the long end*.
 # Tested on two horizons because they answer different questions and, right now,
 # answer them differently. Twelve months asks whether the long end is leading
-# *today*. Three years asks whether it led across the repricing as a whole — a
+# *today*. Two years asks whether it led across the repricing as a whole — a
 # curve that inverted under a hiking cycle and has since bear-steepened will fail
 # the first test and pass the second, and only the second is the debt-cycle
 # claim. Reporting one without the other is how a marker gets narrated either
 # way after the fact.
+#
+# The longer bar is the annual one held for the whole window, not a looser test:
+# leadership has to average the twelve-month pace across both years.
 LONG_END_LEAD_BP = 25       # 30y must outrun the 2y by this much over 12m
-LONG_END_LEAD_3Y_BP = 100   # and by this much across the full three years
+LONG_END_LEAD_2Y_BP = 50    # and hold that pace across both years
 CURVE_STEEP_BP = 150        # 30y-2y this wide is a duration-demand problem
 
 # Gauge 3: monetization fires when the balance sheet turns up while the deficit
@@ -113,17 +116,17 @@ def gauge_1(s):
 # --- gauge 2 ----------------------------------------------------------------
 def gauge_2(s):
     y = s["yields"]
-    now, ago, ago3 = y["now"], y["yr_ago"], y["yr3_ago"]
-    horizon = s.get("window_years", 3)
+    now, ago, ago2 = y["now"], y["yr_ago"], y["yr2_ago"]
+    horizon = s.get("curve_years", 2)
     d30 = (now["y30"] - ago["y30"]) * 100
     d2 = (now["y2"] - ago["y2"]) * 100
-    d30_3y = (now["y30"] - ago3["y30"]) * 100
-    d2_3y = (now["y2"] - ago3["y2"]) * 100
+    d30_2y = (now["y30"] - ago2["y30"]) * 100
+    d2_2y = (now["y2"] - ago2["y2"]) * 100
     curve = (now["y30"] - now["y2"]) * 100
     curve_ago = (ago["y30"] - ago["y2"]) * 100
-    curve_ago3 = (ago3["y30"] - ago3["y2"]) * 100
+    curve_ago2 = (ago2["y30"] - ago2["y2"]) * 100
     long_end_leads = (d30 - d2) >= LONG_END_LEAD_BP
-    long_end_leads_3y = (d30_3y - d2_3y) >= LONG_END_LEAD_3Y_BP
+    long_end_leads_2y = (d30_2y - d2_2y) >= LONG_END_LEAD_2Y_BP
 
     status = ELEVATED if now["y30"] >= 5.0 else CONTAINED
     if long_end_leads and curve >= CURVE_STEEP_BP:
@@ -132,41 +135,41 @@ def gauge_2(s):
         status = CRITICAL
 
     notes = []
-    if long_end_leads_3y and not long_end_leads:
+    if long_end_leads_2y and not long_end_leads:
         notes.append(
             f"Dalio's marker for this gauge is rates rising led by the long end, "
             f"and the answer depends on where you start the clock. Across "
-            f"{horizon} years the 30-year rose {d30_3y:+.0f}bp while the 2-year "
-            f"{'fell' if d2_3y < 0 else 'rose'} {abs(d2_3y):.0f}bp — the long end "
-            f"led by {d30_3y - d2_3y:.0f}bp and the curve went "
-            f"{curve_ago3:+.0f}bp -> {curve:+.0f}bp. The marker IS confirmed on "
+            f"{horizon} years the 30-year rose {d30_2y:+.0f}bp while the 2-year "
+            f"{'fell' if d2_2y < 0 else 'rose'} {abs(d2_2y):.0f}bp — the long end "
+            f"led by {d30_2y - d2_2y:.0f}bp and the curve went "
+            f"{curve_ago2:+.0f}bp -> {curve:+.0f}bp. The marker IS confirmed on "
             f"that horizon. Over the last 12 months it is not: the 30-year rose "
             f"{d30:+.0f}bp against the 2-year's {d2:+.0f}bp and the spread "
-            f"narrowed {curve_ago:.0f}bp -> {curve:.0f}bp. The three-year move is "
-            f"the debt-cycle claim; the twelve-month move is a hiking cycle "
-            f"ending. Both readings are on the chart above so neither can be "
-            f"quoted alone.")
+            f"narrowed {curve_ago:.0f}bp -> {curve:.0f}bp. Read across the full "
+            f"window that is the debt-cycle claim; read across the last year it is "
+            f"a hiking cycle ending. Both are on the chart above, so neither can "
+            f"be quoted alone.")
     elif not long_end_leads:
         notes.append(
             f"Dalio's marker for this gauge is rates rising led by the long end. "
             f"Over 12 months the 30-year rose {d30:+.0f}bp against the 2-year's "
             f"{d2:+.0f}bp, and the 30y-2y spread moved {curve_ago:.0f}bp -> "
             f"{curve:.0f}bp. Over {horizon} years the long end led by only "
-            f"{d30_3y - d2_3y:.0f}bp, short of the {LONG_END_LEAD_3Y_BP}bp test. "
+            f"{d30_2y - d2_2y:.0f}bp, short of the {LONG_END_LEAD_2Y_BP}bp test. "
             f"The marker is NOT confirmed on either horizon.")
     else:
         notes.append(
             f"The long end led on both horizons: {d30 - d2:+.0f}bp over 12 months "
-            f"and {d30_3y - d2_3y:+.0f}bp over {horizon} years. This is the shape "
+            f"and {d30_2y - d2_2y:+.0f}bp over {horizon} years. This is the shape "
             f"Dalio's marker describes.")
     return Gauge("g2", "Selling relative to demand", status,
                  f"30-year at {now['y30']:.2f}%, curve {curve:+.0f}bp.",
                  {"y30": now["y30"], "y2": now["y2"], "y10": now["y10"],
                   "d30_bp": d30, "d2_bp": d2, "curve_bp": curve,
                   "curve_bp_ago": curve_ago, "long_end_leads": long_end_leads,
-                  "d30_3y_bp": d30_3y, "d2_3y_bp": d2_3y,
-                  "curve_bp_3y_ago": curve_ago3,
-                  "long_end_leads_3y": long_end_leads_3y},
+                  "d30_2y_bp": d30_2y, "d2_2y_bp": d2_2y,
+                  "curve_bp_2y_ago": curve_ago2,
+                  "long_end_leads_2y": long_end_leads_2y},
                  notes)
 
 

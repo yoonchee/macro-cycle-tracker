@@ -29,7 +29,7 @@ CURRENT = f"{BASE}/jgbcme.csv"
 # table, so the short leg is the 1-year rather than the 1-month.
 TENORS = {"1Y": "y1", "2Y": "y2", "5Y": "y5", "10Y": "y10", "30Y": "y30", "40Y": "y40"}
 
-YEARS_KEPT = 4      # enough for the three-year comparison plus a margin
+YEARS_KEPT = 4      # enough for the two-year curve comparison plus a margin
 
 
 def _parse(text, since):

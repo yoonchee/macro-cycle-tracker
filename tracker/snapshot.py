@@ -12,9 +12,10 @@ and `main` reports which key failed. A dashboard rendered from a partial refresh
 is worse than one that fails loudly.
 
 The snapshot carries paths, not just points. Every gauge on the page is a claim
-about a *direction*, and a single reading cannot be argued with — so the window
-below is three years everywhere, wide enough to contain the 2023 rate shock and
-narrow enough that the current move is still legible.
+about a *direction*, and a single reading cannot be argued with. Two windows,
+because they answer different questions: time-series paths run three years, wide
+enough to contain the 2023 rate shock; curve comparisons are annual snapshots at
+today, a year back and two years back.
 """
 import argparse
 import datetime as dt
@@ -25,8 +26,14 @@ from .config import SNAPSHOT, DATA
 
 MANUAL = DATA / "manual.json"
 
-WINDOW_YEARS = 3        # history carried onto the page
+WINDOW_YEARS = 3        # history carried onto the page as paths
 FED_WINDOW_YEARS = 5    # two extra, so the 2022 QT peak stays in frame
+
+# Curves are read as annual snapshots: today, a year back, two years back. Three
+# lines, two years of span — a path drawn through more dates than that stops
+# being a curve comparison and becomes a mess of crossings.
+CURVE_LOOKBACK = (("now", 0), ("yr_ago", 1), ("yr2_ago", 2))
+CURVE_YEARS = max(back for _, back in CURVE_LOOKBACK)
 
 # How stale a series may be before we refuse to build. Fiscal and ECOS releases
 # lag by design; market data should be within days.
@@ -77,15 +84,15 @@ def _since(ref, years):
 
 
 def curve(prefix, tenors, ref=None):
-    """A yield curve today, twelve months back and three years back.
+    """A yield curve today, a year back and two years back.
 
     Three dates rather than two because the twelve-month comparison alone cannot
-    distinguish a curve that is still repricing from one that repriced in 2023
+    distinguish a curve that is still repricing from one that repriced earlier
     and has been flat since — and those imply opposite things about demand.
     """
     ref = ref or pick(f"{prefix}.{tenors[-1]}")[0]
     out = {}
-    for label, back in (("now", 0), ("yr_ago", 1), ("yr3_ago", WINDOW_YEARS)):
+    for label, back in CURVE_LOOKBACK:
         row = {}
         for tag in tenors:
             if back == 0:
@@ -225,6 +232,7 @@ def build():
         "as_of": ref,
         "generated": dt.date.today().isoformat(),
         "window_years": WINDOW_YEARS,
+        "curve_years": CURVE_YEARS,
         "us_fiscal": {
             "fytd_months": _fiscal_months(idate),
             "fytd_receipts": receipts, "fytd_outlays": outlays,
@@ -234,7 +242,7 @@ def build():
             "debt_date": ddate,
             "avg_rate_series": [list(r) for r in avg_rate_series],
         },
-        "yields": {"now": yields_now, "yr_ago": yields_ago, "yr3_ago": ust["yr3_ago"],
+        "yields": {"now": yields_now, "yr_ago": yields_ago, "yr2_ago": ust["yr2_ago"],
                    "recent_30y_high": {"date": hi_date, "y30": hi},
                    "since": since},
         "fed": {"balance_sheet_usd_mn": fed, "prior_week_usd_mn": prior,

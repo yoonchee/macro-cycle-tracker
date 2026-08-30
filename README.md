@@ -23,9 +23,10 @@ reading it does exactly that on one of his named markers. See *What it found*.
 Plus his market-action markers: currency versus **gold** (not versus other
 currencies), and the Korea/Japan transmission channel.
 
-Every gauge is read over **three years as well as twelve months**. That is not
-decoration: on the current data the two horizons disagree about Gauge 2, and a
-one-week reading of Gauge 3 said the opposite of what nine months of it says.
+Curves are read at three dates — today, a year back, two years back — and
+balance-sheet trends over several years. That is not decoration: on the current
+data the twelve-month and two-year horizons disagree about Gauge 2, and Gauge 3
+is a slope that a single weekly print cannot show in either direction.
 
 ## Quick start
 
@@ -61,30 +62,27 @@ line, so Gauge 1 scores *severe* — and the average rate Treasury actually pays
 (3.45%) is still 1.28pp below the market 10-year, so a large slice of future
 interest expense is already committed by arithmetic.
 
-**Gauge 3 turned, and reading it weekly hid that.** The Fed balance sheet
-bottomed at $6.55T in Nov 2025 and has risen 2.7% in the nine months since,
-+1.8% over the last six. An earlier version of this repo scored the gauge on the
-week-over-week H.4.1 print, which swings on repo and TGA operations, and it
-reported "still contracting" while the trend had been up for three quarters.
-The gauge is now scored on a six-month slope. What this is *not* is monetization
-at scale: the balance sheet remains 24.9% below its 2022 peak and 1.8% over six
-months is far below the pace of net issuance. This is the gauge leaving
-contained, not arriving at the end state.
+**Gauge 3 has turned.** The Fed balance sheet bottomed at $6.55T in Nov 2025 and
+has risen 2.7% in the nine months since, +1.8% over the last six. The gauge is
+scored on a six-month slope rather than the week-over-week H.4.1 print, which
+swings on repo and Treasury-account operations and says nothing about direction.
+What this is *not* is monetization at scale: the balance sheet remains 24.9%
+below its 2022 peak, and 1.8% over six months is far below the pace of net
+issuance. This is the gauge leaving contained, not arriving at the end state.
 
 **Dalio's long-end marker depends entirely on where you start the clock.** He
 writes that yields rose "led by the long end." Over twelve months that is false:
 the 30-year rose 34bp against the 2-year's 72bp and the 30y−2y spread *narrowed*
-from 126bp to 88bp. Over three years it is true, and emphatically: the 30-year
-rose 93bp while the 2-year *fell* 64bp — a 157bp lead — and the curve went from
-−69bp inverted to +88bp. The twelve-month move is a hiking cycle ending; the
-three-year move is the debt-cycle claim. The page reports both so neither can be
-quoted alone.
+from 126bp to 88bp. Over two years it is true: the 30-year rose 109bp against the
+2-year's 51bp — a 58bp lead — and the curve steepened from +30bp to +88bp. The
+twelve-month move is a hiking cycle ending; the two-year move is the debt-cycle
+claim. The page reports both so neither can be quoted alone.
 
 **Japan is running the same measurement, further along.** Read as a curve rather
 than as a single 10-year print, the JGB market has repriced duration in public:
-the 30-year has gone from 1.59% to **4.04%** in three years (+245bp) and the
-30y−2y spread from 158bp to 234bp. The US–Japan 30-year gap has closed to 118bp
-from 270bp — the hedged-yield arithmetic that sent Japanese capital abroad for a
+the 30-year has gone from 2.08% to **4.04%** in two years (+196bp) and the 30y−2y
+spread from 171bp to 234bp. The US–Japan 30-year gap has closed to 118bp from
+205bp — the hedged-yield arithmetic that sent Japanese capital abroad for a
 generation, running in reverse.
 
 **The Korean buffer is being withdrawn.** A US homeowner on a thirty-year fixed
@@ -120,7 +118,7 @@ is stated in one place so it can be argued with:
 INTEREST_TO_REVENUE   = [(0.10, CONTAINED), (0.20, ELEVATED), (0.30, SEVERE)]
 AVG_RATE_CRITICAL     = 4.0   # interest past ~25% of receipts at current revenue
 LONG_END_LEAD_BP      = 25    # 30y must outrun the 2y by this over 12m
-LONG_END_LEAD_3Y_BP   = 100   # ...and by this over three years
+LONG_END_LEAD_2Y_BP   = 50    # ...and hold that pace across both years
 CURVE_STEEP_BP        = 150
 MONETIZATION_WINDOW_M = 6     # months of balance-sheet slope Gauge 3 reads
 MONETIZATION_TURN_PCT = 1.0   # growth over that window that counts as a turn
@@ -172,7 +170,7 @@ Stated in advance so the reading can't be re-narrated after the fact:
   which is the pace at which it would be absorbing issuance rather than drifting.
 - Average rate on the debt crosses 4.0% → interest past 25% of receipts.
 - 30y−2y widens past ~150bp *with the 30-year leading* → Gauge 2 confirms on
-  both horizons rather than only the three-year one.
+  both horizons rather than only the two-year one.
 - Treasury shortens weighted-average maturity of new issuance.
 - Foreign official UST holdings fall while official gold reserves rise.
 - 30-year JGB above ~4.5%, or the US–Japan 30-year gap closing below ~50bp.
