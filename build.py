@@ -353,6 +353,7 @@ def render(s):
     gold = r["gold"]
     kr, jp = s["asia"]["korea"], s["asia"]["japan"]
     tic, hold = s["tic"], r["holders"]
+    mat, matr = s["us_fiscal"]["maturity"], r["maturity"]
     ny, ay, a2 = s["yields"]["now"], s["yields"]["yr_ago"], s["yields"]["yr2_ago"]
     cz = s.get("curve_years", 2)        # span of the curve comparisons
     hz = s.get("window_years", 3)       # span of the time-series paths
@@ -376,6 +377,21 @@ def render(s):
         aria=(f"Federal Reserve total assets, month-end, {fed['monthly'][0][0]} to "
               f"{fed['monthly'][-1][0]}: peak ${fed['peak_usd_mn']/1e6:.2f}T in "
               f"{fed['peak_date']}, latest ${fed['balance_sheet_usd_mn']/1e6:.2f}T"))
+
+    maturity_chart = ts_chart(
+        [{"label": "WAM, marketable debt", "points": mat["wam_series"], "colour": "accent",
+          "end_fmt": "{:.0f}mo", "width": 2.4},
+         {"label": "WAM, new coupon issuance", "points": mat["coupon_wam_series"],
+          "colour": "ok", "end_fmt": "{:.0f}mo", "width": 2.0},
+         {"label": "Maturing within 1y", "points": mat["maturing_1y_series"],
+          "colour": "crit", "axis": "right", "end_fmt": "{:.0f}%", "width": 2.4},
+         {"label": "Bills", "points": mat["bill_share_series"], "colour": "gold",
+          "axis": "right", "end_fmt": "{:.0f}%", "width": 2.0}],
+        left_fmt="{:.0f}mo", right_fmt="{:.0f}%", x_ticks=5,
+        aria=(f"US Treasury maturity structure, {mat['window'][0]} to {mat['window'][1]}: "
+              f"average maturity {mat['wam_months']:.0f} months, new coupon issuance "
+              f"{mat['coupon_wam_months']:.0f} months, {mat['maturing_1y_pct']:.0f}% maturing "
+              f"within a year, bills {mat['bill_share_pct']:.0f}% of marketable debt"))
 
     tic_chart = ts_chart(
         [{"label": "Foreign official", "points": tic["official_series"], "colour": "crit",
@@ -525,6 +541,48 @@ def render(s):
     line has turned and risen {m3["since_trough_pct"]:+.1f}%. Nine months of slope,
     not one week of print.</figcaption></figure>
   {notes(g3)}
+  </div>
+</section>
+
+<section>{sechead("MARKER", "How long is the fuse")}
+  <p>Dalio's third market-action tell is that a Treasury which cannot sell
+  duration starts funding itself short instead. It is the tell that usually comes
+  first, because it is a decision the issuer makes rather than a price the market
+  sets — and it is the one most easily hidden, because the obvious measure can be
+  held flat while the thing it measures changes underneath.</p>
+  <div class="card striped s-{PILL[matr["status"]]}">{pill(matr["status"])}
+  {metrics(
+      metric("Average maturity", f"{mat['wam_months']:.1f}mo",
+             f"{mat['wam_chg_window']:+.1f}mo over {mat['window_years']} years · "
+             f"{mat['wam_chg_12m']:+.1f}mo over 12m"),
+      metric("Maturing within 1 year", f"{mat['maturing_1y_pct']:.1f}%",
+             f"~${matr['maturing_usd']/1e6:.1f}T · from "
+             f"{mat['maturing_1y_pct'] - mat['maturing_1y_chg_window']:.1f}% "
+             f"{mat['window_years']} years ago"),
+      metric("Bills ÷ marketable", f"{mat['bill_share_pct']:.1f}%",
+             f"{mat['bill_share_chg_window']:+.1f}pp over {mat['window_years']} years · "
+             f"TBAC band 15–20%"),
+      metric("New coupon issuance", f"{mat['coupon_wam_months']:.1f}mo",
+             f"{mat['coupon_wam_chg_window']:+.1f}mo over {mat['window_years']} years · "
+             f"bills excluded"))}
+    <figure>{chart_head("Maturity structure of the marketable debt",
+        f"Monthly, {mat['window'][0][:7]} to {mat['window'][1][:7]} · "
+        f"MSPD and auction results")}
+    {legend(("accent", "Average maturity, months (left)"),
+            ("ok", "New coupon issuance, months (left)"),
+            ("crit", "Maturing within 1 year, % (right)"),
+            ("gold", "Bills ÷ marketable, % (right)"))}
+    {maturity_chart}
+    <figcaption>The blue line is the number Treasury is judged on and it has
+    barely moved: {mat['wam_months']:.1f} months against
+    {mat['wam_months'] - mat['wam_chg_window']:.1f} five years ago. The red and
+    gold lines are what happened underneath it. Bills went from
+    {mat['bill_share_pct'] - mat['bill_share_chg_window']:.1f}% of marketable debt
+    to {mat['bill_share_pct']:.1f}%, and the share repricing inside twelve months
+    from {mat['maturing_1y_pct'] - mat['maturing_1y_chg_window']:.1f}% to
+    {mat['maturing_1y_pct']:.1f}%. Pairing more bills with longer bonds holds an
+    average still. It does not hold a rollover still.</figcaption></figure>
+  {"".join(f'<div class="note"><p>{esc(n)}</p></div>' for n in matr["notes"])}
   </div>
 </section>
 

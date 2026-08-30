@@ -21,8 +21,8 @@ reading it does exactly that on one of his named markers. See *What it found*.
 | 3 | Central-bank monetization | Fed balance sheet, SOMA, the Fed's deferred asset | FRED (free key) |
 
 Plus his market-action markers: currency versus **gold** (not versus other
-currencies), who actually holds the debt (TIC), and the Korea/Japan transmission
-channel.
+currencies), how long the debt is funded for (MSPD and auction results), who
+actually holds it (TIC), and the Korea/Japan transmission channel.
 
 Curves are read at three dates — today, a year back, two years back — and
 balance-sheet trends over several years. That is not decoration: on the current
@@ -79,6 +79,18 @@ from 126bp to 88bp. Over two years it is true: the 30-year rose 109bp against th
 twelve-month move is a hiking cycle ending; the two-year move is the debt-cycle
 claim. The page reports both so neither can be quoted alone.
 
+**Treasury has not shortened its average maturity — it shortened the debt
+anyway.** Weighted-average maturity of marketable debt is 70.0 months against
+70.8 five years ago, so on the number Treasury is judged by, Dalio's shortening
+tell is *not* confirmed. Underneath it: bills went from 18.4% of marketable debt
+to **22.2%**, past the 15–20% band TBAC has long treated as normal, and the share
+maturing within twelve months went from 30.2% to **33.3%** — about $10.5T. That
+is a barbell. More bills at the front paired with longer bonds behind them holds
+an average still while raising the share that reprices inside a year, which is
+the mechanism that turns Gauge 1's 1.28pp repricing gap into actual interest
+expense far sooner than 5.8 years. New coupon issuance has meanwhile shortened
+9.6 months over five years, to 84.1.
+
 **Foreign demand is fine; its composition is not.** Foreign holdings of
 Treasuries rose $1.78T over five years, so the world has not stopped buying. But
 official holders — central banks and sovereign funds, the bid that does not
@@ -131,6 +143,9 @@ AVG_RATE_CRITICAL     = 4.0   # interest past ~25% of receipts at current revenu
 LONG_END_LEAD_BP      = 25    # 30y must outrun the 2y by this over 12m
 LONG_END_LEAD_2Y_BP   = 50    # ...and hold that pace across both years
 CURVE_STEEP_BP        = 150
+BILL_SHARE_HIGH        = 20.0 # top of TBAC's long-standing 15-20% guidance
+MATURING_1Y_HIGH       = 30.0 # share of marketable debt repricing within a year
+WAM_FALL_MONTHS        = 3.0  # fall in average maturity that counts as shortening
 OFFICIAL_SHARE_FALL_PP = 1.0  # 12m fall in the official share that counts
 OFFICIAL_SHARE_LOW     = 45.0 # below this, official money is the minority holder
 MONETIZATION_WINDOW_M = 6     # months of balance-sheet slope Gauge 3 reads
@@ -145,7 +160,7 @@ Change them and the dashboard changes. The sources do not.
 
 | Source | Key | Covers |
 |---|---|---|
-| [Treasury Fiscal Data API](https://fiscaldata.treasury.gov/api-documentation/) | none | debt, interest expense, average rate, MTS receipts/outlays |
+| [Treasury Fiscal Data API](https://fiscaldata.treasury.gov/api-documentation/) | none | debt, interest expense, average rate, MTS receipts/outlays, MSPD maturity detail, auction results |
 | [Treasury daily yield curve](https://home.treasury.gov/interest-rates-data-csv-archive) | none | par yields, 1mo–30yr |
 | [FRED](https://fredaccount.stlouisfed.org/apikeys), Federal Reserve Bank of St. Louis | free | Fed balance sheet, SOMA, deferred asset, CPI, breakevens |
 | Treasury International Capital (TIC), via FRED | (FRED key) | foreign holdings of Treasuries: official/private split and 20 countries |
@@ -185,7 +200,11 @@ Stated in advance so the reading can't be re-narrated after the fact:
 - Average rate on the debt crosses 4.0% → interest past 25% of receipts.
 - 30y−2y widens past ~150bp *with the 30-year leading* → Gauge 2 confirms on
   both horizons rather than only the two-year one.
-- Treasury shortens weighted-average maturity of new issuance.
+- Average maturity falls more than 3 months over five years — so far it has not,
+  and the shortening is showing up in the bill share and the rollover share
+  instead. Watch whether the three ever agree.
+- Bills past ~25% of marketable debt, or the share maturing within a year past
+  ~35%.
 - ~~Foreign official UST holdings fall~~ — **this is happening.** Official share
   40.6% and falling ~2pp a year. Next threshold: official holdings falling in
   dollars *while* total foreign holdings also fall, which would be a demand

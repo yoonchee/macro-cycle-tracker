@@ -65,6 +65,24 @@ notice when a publisher stops publishing.
 4. If it feeds a gauge, add the threshold to `tracker/gauges.py`, not to
    `build.py`.
 
+## Reading the maturity structure
+
+`us.debt.wam_months` is computed per-CUSIP from MSPD table 3, par-weighted,
+which is Treasury's own convention. Two things to keep straight:
+
+- **Paginate.** One month is ~700 rows and a page boundary falls inside a
+  month; a half-fetched month yields a plausible-looking WAM computed from half
+  the debt. `_paged()` exists for exactly this.
+- **The average is the wrong number on its own.** It is held flat by a barbell,
+  so `us.debt.maturing_1y_pct` and `us.debt.bill_share_pct` are scored beside
+  it and any of the three can fire. Reporting only the average would have said
+  nothing was happening.
+- Auction `total_accepted` is competitive + noncompetitive + **SOMA**, and the
+  SOMA leg is the Fed rolling its own holdings rather than the market financing
+  the deficit, so it is subtracted. Bills are excluded from issuance maturity: a
+  4-week bill is sold thirteen times a year, so a bill-inclusive average measures
+  rollover frequency rather than any decision.
+
 ## Reading TIC
 
 `us.tic.*` is the demand side of Gauge 2. Two things to keep straight:
@@ -82,8 +100,6 @@ notice when a publisher stops publishing.
 
 ## Not yet wired
 
-- Treasury weighted-average maturity of new issuance (Dalio's "Treasury shortens
-  maturities" tell) — Monthly Statement of the Public Debt.
 - NY Fed ACM term premium (CSV on newyorkfed.org).
 - 한국부동산원 R-ONE detail — 거래량, 전월세전환율, 시군구 weekly. The monthly
   indices now come through ECOS and need no extra key, but R-ONE's own API wants

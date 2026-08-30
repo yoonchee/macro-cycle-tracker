@@ -39,7 +39,13 @@ CURVE_YEARS = max(back for _, back in CURVE_LOOKBACK)
 
 # How stale a series may be before we refuse to build. Fiscal and ECOS releases
 # lag by design; market data should be within days.
+# Longest matching prefix does NOT win — the first match in insertion order
+# does, so more specific keys go first. MSPD and TIC are monthly and land weeks
+# after the period they describe; the daily series must not inherit their slack.
 MAX_AGE_DAYS = {
+    "us.debt.wam": 60, "us.debt.bill_share": 60, "us.debt.marketable": 60,
+    "us.debt.maturing": 60,
+    "us.issuance.": 60,
     "mkt.": 7, "fx.": 7, "us.ust.": 7, "us.debt.": 10,
     "us.fed.": 21, "us.receipts.": 75, "us.outlays.": 75, "us.deficit.": 75,
     "us.interest.": 75, "kr.housing.": 120, "kr.": 200, "jp.": 10,
@@ -174,6 +180,45 @@ def build():
     jdate = pick("jp.jgb.y10")[0]
     jgb = curve("jp.jgb", JGB_TENORS, jdate)
 
+    # --- maturity structure --------------------------------------------------
+    # Dalio's "Treasury shortens maturities" tell, on the stock and on the flow.
+    # They can disagree: an average maturity held flat by pairing more bills with
+    # longer coupons is not the same thing as an average maturity that is falling.
+    mdate, wam = pick("us.debt.wam_months")
+    _, bill_share = pick("us.debt.bill_share_pct", on_or_before=mdate)
+    _, maturing_1y = pick("us.debt.maturing_1y_pct", on_or_before=mdate)
+    _, marketable_total = pick("us.debt.marketable", on_or_before=mdate)
+    idate2, coupon_wam = pick("us.issuance.coupon_wam_months")
+    m_since = _since(mdate, TIC_WINDOW_YEARS)
+    wam_hist = store.series("us.debt.wam_months", since=m_since)
+    bill_hist = store.series("us.debt.bill_share_pct", since=m_since)
+    coupon_hist = store.series("us.issuance.coupon_wam_months", since=m_since)
+    _, wam_yr = years_ago("us.debt.wam_months", mdate, 1)
+    _, bill_yr = years_ago("us.debt.bill_share_pct", mdate, 1)
+    _, maturing_yr = years_ago("us.debt.maturing_1y_pct", mdate, 1)
+    maturing_hist = store.series("us.debt.maturing_1y_pct", since=m_since)
+    _, coupon_yr = years_ago("us.issuance.coupon_wam_months", idate2, 1)
+
+    maturity = {
+        "date": mdate, "issuance_date": idate2,
+        "window": [wam_hist[0][0], mdate],
+        "window_years": TIC_WINDOW_YEARS,
+        "wam_months": wam, "wam_months_yr_ago": wam_yr,
+        "wam_chg_12m": wam - wam_yr,
+        "wam_chg_window": wam - wam_hist[0][1],
+        "bill_share_pct": bill_share, "bill_share_pct_yr_ago": bill_yr,
+        "maturing_1y_pct": maturing_1y, "maturing_1y_pct_yr_ago": maturing_yr,
+        "maturing_1y_chg_window": maturing_1y - maturing_hist[0][1],
+        "maturing_1y_series": [list(r) for r in maturing_hist],
+        "bill_share_chg_window": bill_share - bill_hist[0][1],
+        "coupon_wam_months": coupon_wam, "coupon_wam_months_yr_ago": coupon_yr,
+        "coupon_wam_chg_12m": coupon_wam - coupon_yr,
+        "coupon_wam_chg_window": coupon_wam - coupon_hist[0][1],
+        "wam_series": [list(r) for r in wam_hist],
+        "bill_share_series": [list(r) for r in bill_hist],
+        "coupon_wam_series": [list(r) for r in coupon_hist],
+    }
+
     # --- who holds the debt (TIC) --------------------------------------------
     # The demand side of Gauge 2. Total foreign demand can rise while the
     # composition rotates out of official reserve managers, and only the second
@@ -291,6 +336,8 @@ def build():
             "debt_total": debt_total, "debt_held_public": debt_public,
             "debt_date": ddate,
             "avg_rate_series": [list(r) for r in avg_rate_series],
+            "marketable": marketable_total,
+            "maturity": maturity,
         },
         "yields": {"now": yields_now, "yr_ago": yields_ago, "yr2_ago": ust["yr2_ago"],
                    "recent_30y_high": {"date": hi_date, "y30": hi},

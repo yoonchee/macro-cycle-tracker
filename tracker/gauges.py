@@ -39,6 +39,15 @@ LONG_END_LEAD_BP = 25       # 30y must outrun the 2y by this much over 12m
 LONG_END_LEAD_2Y_BP = 50    # and hold that pace across both years
 CURVE_STEEP_BP = 150        # 30y-2y this wide is a duration-demand problem
 
+# Dalio's "Treasury shortens maturities" tell, scored three ways because the
+# obvious measure is the one most easily held flat. Average maturity can be kept
+# steady by pairing more bills with longer bonds — a barbell — while the share of
+# debt repricing inside a year climbs the whole time. So the rollover share and
+# the bill share are tested alongside it, and any of the three can fire.
+BILL_SHARE_HIGH = 20.0       # top of TBAC's long-standing 15-20% guidance band
+MATURING_1Y_HIGH = 30.0      # share of marketable debt repricing within a year
+WAM_FALL_MONTHS = 3.0        # fall in average maturity over the window
+
 # Gauge 2, demand side. Dalio's marker is foreign official holdings falling —
 # central banks and sovereign funds are the price-insensitive bid, and losing
 # them means the debt has to clear at a price private money will accept.
@@ -190,6 +199,47 @@ def gauge_2(s):
                  notes)
 
 
+# --- how long is the fuse ---------------------------------------------------
+def maturity(s):
+    """Dalio's shortening tell: stock, flow and rollover share."""
+    m = s["us_fiscal"]["maturity"]
+    triggers = {
+        "bills": m["bill_share_pct"] > BILL_SHARE_HIGH,
+        "rollover": m["maturing_1y_pct"] > MATURING_1Y_HIGH,
+        "wam": m["wam_chg_window"] <= -WAM_FALL_MONTHS,
+    }
+    n = sum(triggers.values())
+    status = CONTAINED if n == 0 else SEVERE if n == 3 else ELEVATED
+
+    marketable = s["us_fiscal"].get("marketable")
+    notes = []
+    if not triggers["wam"]:
+        notes.append(
+            f"On the obvious measure the marker is NOT confirmed. Average maturity of "
+            f"marketable debt is {m['wam_months']:.1f} months against "
+            f"{m['wam_months'] - m['wam_chg_window']:.1f} months {m['window_years']} years "
+            f"ago — a move of {m['wam_chg_window']:+.1f} months. Treasury has not, on this "
+            f"number, shortened anything.")
+    notes.append(
+        f"The composition underneath it did change. Bills are {m['bill_share_pct']:.1f}% of "
+        f"marketable debt against {m['bill_share_pct'] - m['bill_share_chg_window']:.1f}% "
+        f"{m['window_years']} years ago, above the 15-20% band the Treasury Borrowing "
+        f"Advisory Committee has long treated as normal, and "
+        f"{m['maturing_1y_pct']:.1f}% of the stock now matures within twelve months, from "
+        f"{m['maturing_1y_pct'] - m['maturing_1y_chg_window']:.1f}%. That is the barbell: "
+        f"more bills at the front paired with longer coupons behind them holds the average "
+        f"still while raising the share that reprices inside a year.")
+    notes.append(
+        f"Which is why this sits next to Gauge 1 rather than on its own. A third of the "
+        f"marketable debt repricing annually is the mechanism by which the gap between the "
+        f"{s['us_fiscal']['avg_rate_series'][-1][1]:.2f}% Treasury pays and the "
+        f"{s['yields']['now']['y10']:.2f}% the market charges becomes interest expense — "
+        f"not over the {m['wam_months']/12:.1f} years the average maturity implies, but "
+        f"far sooner for the front third of it.")
+    return {"status": status, "triggers": triggers, "notes": notes,
+            "maturing_usd": (marketable or 0) * m["maturing_1y_pct"] / 100}
+
+
 # --- who holds the debt -----------------------------------------------------
 def holders(s):
     """The demand side of Gauge 2, split by holder type and by jurisdiction."""
@@ -329,7 +379,7 @@ def read(snapshot):
     fired = [g for g in gs if ORDER.index(g.status) >= ORDER.index(ELEVATED)]
     return {"gauges": gs, "stage": _worst(*[g.status for g in gs]),
             "n_elevated": len(fired), "gold": vs_gold(snapshot),
-            "holders": holders(snapshot)}
+            "maturity": maturity(snapshot), "holders": holders(snapshot)}
 
 
 if __name__ == "__main__":
@@ -342,6 +392,12 @@ if __name__ == "__main__":
         for n in g.notes:
             print(f"            · {n}")
         print()
+    mt = r["maturity"]
+    print(f"Maturity structure [{mt['status'].upper()}]: "
+          f"{', '.join(k for k, v in mt['triggers'].items() if v) or 'no triggers'}")
+    for n in mt["notes"]:
+        print(f"  · {n}")
+    print()
     h = r["holders"]
     print(f"Foreign holders [{h['status'].upper()}]: official share "
           f"{h['share']:.1f}% (from {h['share_yr_ago']:.1f}% a year ago)")
