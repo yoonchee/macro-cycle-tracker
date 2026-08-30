@@ -6,6 +6,7 @@ Daily yield curve:     https://home.treasury.gov/interest-rates-data-csv-archive
 import csv
 import io
 import datetime as dt
+import os
 import time
 
 import requests
@@ -44,7 +45,7 @@ def _get(path, **params):
 # throttled datacenter IP gets — can hang far past any timeout while a small one
 # either lands or fails fast.
 BULK_TIMEOUT = (10, 45)     # (connect, read)
-BULK_PAGE = 2000
+BULK_PAGE = 5000
 BULK_RETRIES = 3
 MAX_PAGES = 60              # a stuck total-pages must not become an endless loop
 
@@ -184,15 +185,18 @@ YEARS_KEPT = 4
 # Measured on the stock and on the flow, because they can disagree and each
 # answers a different question. The stock says what has already been financed
 # short; the flow says what Treasury is choosing to sell now.
-MSPD_YEARS = 5
+# Published MSPD months never change, and the store is idempotent on
+# (series, date), so a refresh only needs the recent window — history
+# accumulates. This matters: the Fiscal Data API is an order of magnitude slower
+# from a datacenter IP than from a laptop, and refetching five years of
+# per-CUSIP detail every week turned a one-minute job into a seven-minute one.
+# Set MSPD_YEARS in the environment to backfill a cold store.
+MSPD_YEARS = float(os.environ.get("MSPD_YEARS") or 1.5)
+MSPD_BACKFILL_YEARS = 5
 
 
 def _since(years):
-    today = dt.date.today()
-    try:
-        return today.replace(year=today.year - years).isoformat()
-    except ValueError:                      # 29 Feb
-        return today.replace(year=today.year - years, day=28).isoformat()
+    return (dt.date.today() - dt.timedelta(days=round(365.25 * years))).isoformat()
 
 
 def maturity_profile(years=MSPD_YEARS):

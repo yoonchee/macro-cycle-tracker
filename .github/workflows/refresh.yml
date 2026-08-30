@@ -11,6 +11,10 @@ on:
         description: "Sources to refresh (space-separated), or blank for all"
         required: false
         default: ""
+      mspd_years:
+        description: "Years of MSPD maturity detail to fetch (blank = recent window)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -22,6 +26,10 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    # The Fiscal Data API is much slower from a runner than from a laptop, and a
+    # large response arriving as a trickle does not trip a socket read timeout.
+    # Fail in twenty minutes rather than burning the default six hours.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -46,6 +54,7 @@ jobs:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           ECOS_API_KEY: ${{ secrets.ECOS_API_KEY }}
           REB_API_KEY: ${{ secrets.REB_API_KEY }}
+          MSPD_YEARS: ${{ inputs.mspd_years }}
         run: python refresh.py ${{ inputs.sources }}
 
       # snapshot.py raises on a missing or stale series rather than writing
