@@ -23,9 +23,6 @@ Statistic codes are verified against the live ECOS catalogue (StatisticTableList
 INFO-200 "해당하는 데이터가 없습니다" rather than an error, so `python -m
 tracker.sources.korea --catalog <keyword>` re-discovers them.
 """
-import json
-import urllib.request
-
 import requests
 
 from ..config import ECOS_API_KEY, REB_API_KEY, UA, TIMEOUT

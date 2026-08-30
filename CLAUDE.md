@@ -44,6 +44,19 @@ Gauge definitions come from *How Countries Go Broke: The Big Cycle* (2025).
 - If a marker Dalio names is **not** confirmed by the data, say so on the page.
   The tracker exists to discipline the narrative, not to illustrate it.
 
+## Refreshing
+
+`python refresh.py` locally, or the `Refresh monitor` workflow — cron Sundays
+07:00 KST plus `gh workflow run refresh.yml`. The workflow is the thing that
+publishes: it commits `data/snapshot.json` and `docs/index.html`, and Pages
+serves `docs/` from `main`, so a green run republishes the site.
+
+`snapshot.py` raises on a missing or stale series rather than writing zeros, so
+a partial fetch fails the run instead of shipping a page that looks fine and
+isn't. If a run fails on staleness, check `MAX_AGE_DAYS` against the source's
+actual release calendar before widening it — the point of the check is to
+notice when a publisher stops publishing.
+
 ## Adding a source
 
 1. New module in `tracker/sources/` with `fetch_all()`.
@@ -71,7 +84,6 @@ Gauge definitions come from *How Countries Go Broke: The Big Cycle* (2025).
 
 - Treasury weighted-average maturity of new issuance (Dalio's "Treasury shortens
   maturities" tell) — Monthly Statement of the Public Debt.
-- TIC foreign holdings of Treasuries; World Gold Council central-bank purchases.
 - NY Fed ACM term premium (CSV on newyorkfed.org).
 - 한국부동산원 R-ONE detail — 거래량, 전월세전환율, 시군구 weekly. The monthly
   indices now come through ECOS and need no extra key, but R-ONE's own API wants
