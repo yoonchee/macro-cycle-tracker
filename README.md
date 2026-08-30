@@ -21,7 +21,8 @@ reading it does exactly that on one of his named markers. See *What it found*.
 | 3 | Central-bank monetization | Fed balance sheet, SOMA, the Fed's deferred asset | FRED (free key) |
 
 Plus his market-action markers: currency versus **gold** (not versus other
-currencies), and the Korea/Japan transmission channel.
+currencies), who actually holds the debt (TIC), and the Korea/Japan transmission
+channel.
 
 Curves are read at three dates — today, a year back, two years back — and
 balance-sheet trends over several years. That is not decoration: on the current
@@ -78,6 +79,16 @@ from 126bp to 88bp. Over two years it is true: the 30-year rose 109bp against th
 twelve-month move is a hiking cycle ending; the two-year move is the debt-cycle
 claim. The page reports both so neither can be quoted alone.
 
+**Foreign demand is fine; its composition is not.** Foreign holdings of
+Treasuries rose $1.78T over five years, so the world has not stopped buying. But
+official holders — central banks and sovereign funds, the bid that does not
+negotiate on price — fell $438bn over that window while private holdings rose
+$2.22T. The official share of foreign holdings is **40.6%**, from 42.8% a year
+ago and 67.8% in 2015. The two lines crossed in late 2023. Read by jurisdiction
+the same rotation shows up: reserve managers hold $350bn less than five years
+ago, custody and fund-domicile centres $1.02T more. Treat the country cut
+carefully — TIC attributes a bond to its custodian's country, not its owner.
+
 **Japan is running the same measurement, further along.** Read as a curve rather
 than as a single 10-year print, the JGB market has repriced duration in public:
 the 30-year has gone from 2.08% to **4.04%** in two years (+196bp) and the 30y−2y
@@ -120,6 +131,8 @@ AVG_RATE_CRITICAL     = 4.0   # interest past ~25% of receipts at current revenu
 LONG_END_LEAD_BP      = 25    # 30y must outrun the 2y by this over 12m
 LONG_END_LEAD_2Y_BP   = 50    # ...and hold that pace across both years
 CURVE_STEEP_BP        = 150
+OFFICIAL_SHARE_FALL_PP = 1.0  # 12m fall in the official share that counts
+OFFICIAL_SHARE_LOW     = 45.0 # below this, official money is the minority holder
 MONETIZATION_WINDOW_M = 6     # months of balance-sheet slope Gauge 3 reads
 MONETIZATION_TURN_PCT = 1.0   # growth over that window that counts as a turn
 MONETIZATION_FAST_PCT = 5.0   # ...and as absorbing issuance rather than drifting
@@ -135,6 +148,7 @@ Change them and the dashboard changes. The sources do not.
 | [Treasury Fiscal Data API](https://fiscaldata.treasury.gov/api-documentation/) | none | debt, interest expense, average rate, MTS receipts/outlays |
 | [Treasury daily yield curve](https://home.treasury.gov/interest-rates-data-csv-archive) | none | par yields, 1mo–30yr |
 | [FRED](https://fredaccount.stlouisfed.org/apikeys), Federal Reserve Bank of St. Louis | free | Fed balance sheet, SOMA, deferred asset, CPI, breakevens |
+| Treasury International Capital (TIC), via FRED | (FRED key) | foreign holdings of Treasuries: official/private split and 20 countries |
 | [財務省 JGB par yields](https://www.mof.go.jp/english/jgbs/reference/interest_rate/) (Japan MoF) | none | daily JGB curve, 1y–40y, back to 1974 |
 | Yahoo Finance, via [yfinance](https://github.com/ranaroussi/yfinance) | none | gold, S&P 500, KOSPI, Nikkei, FX, BTC |
 | 한국은행 경제통계시스템 [ECOS](https://ecos.bok.or.kr/api/) (Bank of Korea) | free | 기준금리, 가계신용, 주택담보대출 금리 및 고정·변동 비중, CPI |
@@ -172,7 +186,12 @@ Stated in advance so the reading can't be re-narrated after the fact:
 - 30y−2y widens past ~150bp *with the 30-year leading* → Gauge 2 confirms on
   both horizons rather than only the two-year one.
 - Treasury shortens weighted-average maturity of new issuance.
-- Foreign official UST holdings fall while official gold reserves rise.
+- ~~Foreign official UST holdings fall~~ — **this is happening.** Official share
+  40.6% and falling ~2pp a year. Next threshold: official holdings falling in
+  dollars *while* total foreign holdings also fall, which would be a demand
+  problem rather than a composition one.
+- Official gold reserves rise — still unwired. FRED has no usable series and the
+  IMF's IFS endpoint is retired; World Gold Council would need a licence.
 - 30-year JGB above ~4.5%, or the US–Japan 30-year gap closing below ~50bp.
 - Korean fixed-rate share below 20% while 가계신용 keeps rising.
 - Seoul 실거래가격지수 turning down while 전세 holds → the leverage, not the

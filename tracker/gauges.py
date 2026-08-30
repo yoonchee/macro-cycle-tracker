@@ -39,6 +39,23 @@ LONG_END_LEAD_BP = 25       # 30y must outrun the 2y by this much over 12m
 LONG_END_LEAD_2Y_BP = 50    # and hold that pace across both years
 CURVE_STEEP_BP = 150        # 30y-2y this wide is a duration-demand problem
 
+# Gauge 2, demand side. Dalio's marker is foreign official holdings falling —
+# central banks and sovereign funds are the price-insensitive bid, and losing
+# them means the debt has to clear at a price private money will accept.
+# Measured as the official SHARE of foreign holdings, because the dollar level
+# is a market value that falls when yields rise even with nobody selling.
+OFFICIAL_SHARE_FALL_PP = 1.0    # pp fall over 12m that counts as the bid receding
+OFFICIAL_SHARE_LOW = 45.0       # below this, official money is the minority holder
+
+# TIC attributes holdings to the CUSTODIAN's country, not the owner. These two
+# groupings are the honest way to read the country table: jurisdictions whose
+# totals are dominated by custody and fund domicile say little about who owns
+# the bonds, while reserve managers' totals mostly do. Everything unlisted is
+# mixed and reported as such rather than being forced into one bucket.
+CUSTODY_CENTRES = {"uk", "belgium", "cayman", "luxembourg", "ireland"}
+RESERVE_MANAGERS = {"japan", "china", "taiwan", "korea", "india", "brazil",
+                    "saudi", "hong_kong", "singapore", "norway", "uae"}
+
 # Gauge 3: monetization fires when the balance sheet turns up while the deficit
 # is still structurally large.
 #
@@ -173,6 +190,52 @@ def gauge_2(s):
                  notes)
 
 
+# --- who holds the debt -----------------------------------------------------
+def holders(s):
+    """The demand side of Gauge 2, split by holder type and by jurisdiction."""
+    t = s["tic"]
+    share, share0 = t["official_share_pct"], t["official_share_pct_yr_ago"]
+    receding = (share0 - share) >= OFFICIAL_SHARE_FALL_PP
+
+    groups = {"custody": [], "reserve": [], "other": []}
+    for c in t["countries"]:
+        key = ("custody" if c["slug"] in CUSTODY_CENTRES else
+               "reserve" if c["slug"] in RESERVE_MANAGERS else "other")
+        groups[key].append(dict(c, group=key))
+    totals = {k: sum(c["change"] for c in v) for k, v in groups.items()}
+
+    notes = []
+    if receding:
+        notes.append(
+            f"Foreign holdings of Treasuries rose ${t['total_chg_window']/1e6:,.2f}T over "
+            f"{t['window_years']} years, so demand from abroad is not the problem. Its "
+            f"composition is. Official holders — central banks and sovereign funds, the "
+            f"bid that does not negotiate on price — went "
+            f"{'up' if t['official_chg_window'] > 0 else 'down'} "
+            f"${abs(t['official_chg_window'])/1000:,.0f}bn over the same window while "
+            f"private holdings rose ${t['private_chg_window']/1e6:,.2f}T. The official "
+            f"share of foreign holdings is {share:.1f}%, from {share0:.1f}% a year ago.")
+    if totals["reserve"] < 0 < totals["custody"]:
+        notes.append(
+            f"The country table splits the same way. Reserve managers hold "
+            f"${abs(totals['reserve'])/1000:,.0f}bn less than five years ago; custody and "
+            f"fund-domicile centres hold ${totals['custody']/1e6:,.2f}T more. Read that "
+            f"cautiously: TIC attributes a holding to the custodian's country, so part of "
+            f"the shift is the same bonds moving to a different custodian rather than to a "
+            f"different owner. It is a reason to trust the official/private split above, "
+            f"which is measured directly, over any single country's line.")
+
+    status = CONTAINED
+    if receding:
+        status = ELEVATED
+    if share < OFFICIAL_SHARE_LOW and receding:
+        status = SEVERE
+
+    return {"status": status, "receding": receding, "share": share,
+            "share_yr_ago": share0, "groups": groups, "group_totals": totals,
+            "notes": notes}
+
+
 # --- gauge 3 ----------------------------------------------------------------
 def _months_between(a, b):
     ya, ma = int(a[:4]), int(a[5:7])
@@ -265,7 +328,8 @@ def read(snapshot):
     gs = [gauge_1(snapshot), gauge_2(snapshot), gauge_3(snapshot)]
     fired = [g for g in gs if ORDER.index(g.status) >= ORDER.index(ELEVATED)]
     return {"gauges": gs, "stage": _worst(*[g.status for g in gs]),
-            "n_elevated": len(fired), "gold": vs_gold(snapshot)}
+            "n_elevated": len(fired), "gold": vs_gold(snapshot),
+            "holders": holders(snapshot)}
 
 
 if __name__ == "__main__":
@@ -278,6 +342,12 @@ if __name__ == "__main__":
         for n in g.notes:
             print(f"            · {n}")
         print()
+    h = r["holders"]
+    print(f"Foreign holders [{h['status'].upper()}]: official share "
+          f"{h['share']:.1f}% (from {h['share_yr_ago']:.1f}% a year ago)")
+    for n in h["notes"]:
+        print(f"  · {n}")
+    print()
     print("Currencies vs gold, 12m:")
     for c, v in r["gold"]["currencies"].items():
         print(f"  {c}: {v['currency_vs_gold_pct']:+6.1f}%")

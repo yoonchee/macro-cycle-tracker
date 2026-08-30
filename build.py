@@ -89,6 +89,22 @@ def _ord(d):
     return dt.date.fromisoformat(d).toordinal()
 
 
+def _fit_fmt(fmt, ticks):
+    """Widen a tick format until it stops lying about the tick values.
+
+    A nice axis can land on half-steps, and "{:.0f}" then renders 2.5 and 7.5 as
+    "2" and "8" — an axis whose labels are not evenly spaced even though its
+    gridlines are. Only ever adds precision, never removes it.
+    """
+    if ".0f" not in fmt:
+        return fmt
+    for places in (0, 1, 2):
+        candidate = fmt.replace(".0f", f".{places}f")
+        if all(abs(v - float(f"{v:.{places}f}")) < 1e-9 for v in ticks):
+            return candidate
+    return fmt.replace(".0f", ".2f")
+
+
 def ts_chart(lines, *, aria="", W=720, H=252, n_ticks=4, x_ticks=4,
              left_fmt="{:.0f}", right_fmt="{:.0f}",
              left_pad=(0.06, 0.10), right_pad=(0.06, 0.10), left_range=None):
@@ -134,9 +150,11 @@ def ts_chart(lines, *, aria="", W=720, H=252, n_ticks=4, x_ticks=4,
 
     grid = "".join(f'<line class="ax" stroke-dasharray="2 4" opacity=".5" x1="{PAD_L}" '
                    f'y1="{Y(t):.1f}" x2="{W-PAD_R}" y2="{Y(t):.1f}"></line>' for t in l_ticks)
-    gtext = "".join(f'<text x="{PAD_L-8}" y="{Y(t)+4:.1f}">{left_fmt.format(t)}</text>'
+    lfmt = _fit_fmt(left_fmt, l_ticks)
+    gtext = "".join(f'<text x="{PAD_L-8}" y="{Y(t)+4:.1f}">{lfmt.format(t)}</text>'
                     for t in l_ticks)
-    rtext = ("".join(f'<text x="{W-PAD_R+8}" y="{Y(l):.1f}">{right_fmt.format(t)}</text>'
+    rfmt = _fit_fmt(right_fmt, r[2]) if r else right_fmt
+    rtext = ("".join(f'<text x="{W-PAD_R+8}" y="{Y(l):.1f}">{rfmt.format(t)}</text>'
                      for l, t in zip(l_ticks, r[2]))) if r else ""
 
     body = []
@@ -261,6 +279,42 @@ def gap_scale(avg, y10, y30, lo=None, hi=None):
           f'<span class="num">{hi:.1f}%</span></div></div>')
 
 
+GROUP_COLOUR = {"reserve": "crit", "custody": "accent", "other": "muted"}
+GROUP_LABEL = {"reserve": "Reserve manager", "custody": "Custody / fund domicile",
+               "other": "Mixed"}
+
+
+def change_bars(rows, unit="bn"):
+    """Change over a window, diverging from a zero line.
+
+    Bars are coloured by holder type rather than by sign: the finding is that
+    the two groups moved in opposite directions, and colouring by sign would
+    just restate the geometry.
+    """
+    # Bars reach at most ~85% of each half, so the longest one still leaves room
+    # for its own value label inside the track rather than pushing it into the
+    # country-name column.
+    span = max(abs(r["change"]) for r in rows) / 0.85
+    ZERO = 50.0                             # zero sits mid-track
+    out = []
+    for r in rows:
+        w = abs(r["change"]) / (2 * span) * 100
+        left = ZERO - w if r["change"] < 0 else ZERO
+        val = f'{r["change"]/1000:+,.0f}{unit}'
+        # the number sits just beyond the tip of its own bar, on the outside
+        vstyle = (f'right:{100 - left + 1.2:.1f}%' if r["change"] < 0
+                  else f'left:{left + w + 1.2:.1f}%')
+        out.append(
+            f'<div class="dbarrow"><span class="lbl">{esc(r["name"])}</span>'
+            f'<div class="dbartrack"><div class="dbarzero" style="left:{ZERO:.1f}%"></div>'
+            f'<div class="dbarfill" style="left:{left:.1f}%; width:{w:.1f}%; '
+            f'background:var(--{GROUP_COLOUR[r["group"]]})"></div>'
+            f'<div class="dbarval" style="{vstyle}">{val}</div></div></div>')
+    return (f'<div class="dbars">{"".join(out)}</div>'
+            f'<div class="dbarscale"><span>−${span/1000:,.0f}{unit}</span><span>0</span>'
+            f'<span>+${span/1000:,.0f}{unit}</span></div>')
+
+
 def gold_bars(currencies):
     rows = sorted(currencies.items(), key=lambda kv: kv[1]["currency_vs_gold_pct"])
     span = max(abs(v["currency_vs_gold_pct"]) for _, v in rows) * 1.26
@@ -298,6 +352,7 @@ def render(s):
     m1, m2, m3 = g1.metrics, g2.metrics, g3.metrics
     gold = r["gold"]
     kr, jp = s["asia"]["korea"], s["asia"]["japan"]
+    tic, hold = s["tic"], r["holders"]
     ny, ay, a2 = s["yields"]["now"], s["yields"]["yr_ago"], s["yields"]["yr2_ago"]
     cz = s.get("curve_years", 2)        # span of the curve comparisons
     hz = s.get("window_years", 3)       # span of the time-series paths
@@ -321,6 +376,24 @@ def render(s):
         aria=(f"Federal Reserve total assets, month-end, {fed['monthly'][0][0]} to "
               f"{fed['monthly'][-1][0]}: peak ${fed['peak_usd_mn']/1e6:.2f}T in "
               f"{fed['peak_date']}, latest ${fed['balance_sheet_usd_mn']/1e6:.2f}T"))
+
+    tic_chart = ts_chart(
+        [{"label": "Foreign official", "points": tic["official_series"], "colour": "crit",
+          "scale": 1 / 1e6, "end_fmt": "${:.2f}T", "width": 2.4},
+         {"label": "Foreign private", "points": tic["private_series"], "colour": "accent",
+          "scale": 1 / 1e6, "end_fmt": "${:.2f}T", "width": 2.4},
+         {"label": "Total", "points": tic["total_series"], "colour": "muted",
+          "scale": 1 / 1e6, "end_fmt": "${:.2f}T", "width": 1.8, "dash": True}],
+        left_fmt="${:.0f}T", x_ticks=5, left_pad=(0.06, 0.05),
+        aria=(f"Foreign holdings of US Treasuries, {tic['window'][0]} to {tic['window'][1]}: "
+              f"official ${tic['official_series'][0][1]/1e6:.2f}T to ${tic['official']/1e6:.2f}T, "
+              f"private ${tic['private_series'][0][1]/1e6:.2f}T to ${tic['private']/1e6:.2f}T, "
+              f"total ${tic['total']/1e6:.2f}T"))
+
+    country_rows = sorted(
+        (c for g in hold["groups"].values() for c in g),
+        key=lambda c: -c["change"])
+    country_bars = change_bars(country_rows)
 
     buffer_chart = ts_chart(
         [{"label": "Fixed share", "points": kr["fixed_share_series"], "colour": "accent",
@@ -453,6 +526,51 @@ def render(s):
     not one week of print.</figcaption></figure>
   {notes(g3)}
   </div>
+</section>
+
+<section>{sechead("MARKER", "Who is financing it")}
+  <p>Gauges 1 and 2 measure the burden and the price. This is the other half of
+  the same question: <em>who shows up at the auction</em>. Central banks and
+  sovereign funds buy Treasuries for reserve reasons rather than return ones —
+  they are the bid that does not negotiate. Private money does negotiate, and
+  the price it negotiates for is the yield.</p>
+  <div class="card striped s-{PILL[hold["status"]]}">{pill(hold["status"])}
+  {metrics(
+      metric("Foreign official", f"${tic['official']/1e6:.2f}T",
+             f"{tic['official_chg_12m']/1000:+,.0f}bn over 12 months"),
+      metric("Foreign private", f"${tic['private']/1e6:.2f}T",
+             f"{tic['private_chg_window']/1e6:+.2f}T over {tic['window_years']} years"),
+      metric("Official share", f"{tic['official_share_pct']:.1f}%",
+             f"From {tic['official_share_pct_yr_ago']:.1f}% a year ago"),
+      metric("Total foreign held", f"${tic['total']/1e6:.2f}T",
+             f"As of {tic['date'][:7]} · TIC lags ~2 months"))}
+    <figure>{chart_head("Foreign holdings of US Treasuries, by holder type",
+        f"Monthly, {tic['window'][0][:7]} to {tic['window'][1][:7]}")}
+    {legend(("crit", "Foreign official"), ("accent", "Foreign private"),
+            ("muted", "Total", "dashed"))}
+    {tic_chart}
+    <figcaption>The two lines crossed. Five years ago official holders were the
+    larger half of foreign ownership; today private money holds
+    ${tic['private']/1e6:.2f}T against official money's ${tic['official']/1e6:.2f}T.
+    Total foreign demand grew throughout — this is a change in <em>who</em>, not
+    in how much.</figcaption></figure>
+  </div>
+
+  <div class="card striped s-neutral" style="margin-top:18px">
+    <figure>{chart_head("Change in holdings by jurisdiction",
+        f"{tic['window'][0][:7]} to {tic['window'][1][:7]} · the twenty largest holders, "
+        f"{tic['countries_share_pct']:.0f}% of the total")}
+    {legend(("crit", "Reserve manager"), ("accent", "Custody / fund domicile"),
+            ("muted", "Mixed"))}
+    {country_bars}
+    <figcaption>Almost everything that fell is a sovereign reserve holder;
+    almost everything that rose fastest is a custody or fund-domicile centre.
+    That is the same rotation the chart above measures directly — but read it
+    with care, because TIC attributes a bond to its custodian's country, not its
+    owner, so a holding that moves from Tokyo to a London custodian appears here
+    as Japan selling and the UK buying.</figcaption></figure>
+  </div>
+  {"".join(f'<div class="note"><p>{esc(n)}</p></div>' for n in hold["notes"])}
 </section>
 
 <section>{sechead("MARKER", "The measuring stick")}

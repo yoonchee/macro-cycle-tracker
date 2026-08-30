@@ -170,3 +170,24 @@ footer a{color:var(--accent)}
   ul.watch li{grid-template-columns:1fr}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important; animation:none!important}}
+
+/* Diverging bars — a change that can go either way needs a zero line, not a
+   left edge. Label column is wider than .barrow's because these are country
+   names rather than currency codes. */
+.dbars{display:flex; flex-direction:column; gap:7px; margin:4px 0 2px}
+.dbarrow{display:grid; grid-template-columns:104px 1fr; align-items:center; gap:12px}
+.dbarrow .lbl{font-size:12.5px; color:var(--ink-2); text-align:right;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.dbartrack{position:relative; height:22px}
+.dbarzero{position:absolute; top:-2px; bottom:-2px; width:1px; background:var(--rule-strong)}
+.dbarfill{position:absolute; top:3px; bottom:3px; border-radius:2px; opacity:.85}
+.dbarval{position:absolute; top:50%; transform:translateY(-50%);
+  font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--ink-2); white-space:nowrap}
+.dbarrow:hover .dbarfill{opacity:1}
+.dbarscale{display:flex; justify-content:space-between; font-family:"IBM Plex Mono",monospace;
+  font-size:10.5px; color:var(--muted); margin-top:6px; padding-left:116px}
+@media (max-width:640px){
+  .dbarrow{grid-template-columns:82px 1fr}
+  .dbarrow .lbl{font-size:11.5px}
+  .dbarscale{padding-left:94px}
+}

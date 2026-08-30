@@ -23,11 +23,13 @@ import json
 
 from . import store
 from .config import SNAPSHOT, DATA
+from .sources.fred import TIC_NAMES   # constant table, no network
 
 MANUAL = DATA / "manual.json"
 
 WINDOW_YEARS = 3        # history carried onto the page as paths
 FED_WINDOW_YEARS = 5    # two extra, so the 2022 QT peak stays in frame
+TIC_WINDOW_YEARS = 5    # TIC is monthly and slow-moving; five years shows the rotation
 
 # Curves are read as annual snapshots: today, a year back, two years back. Three
 # lines, two years of span — a path drawn through more dates than that stops
@@ -41,6 +43,7 @@ MAX_AGE_DAYS = {
     "mkt.": 7, "fx.": 7, "us.ust.": 7, "us.debt.": 10,
     "us.fed.": 21, "us.receipts.": 75, "us.outlays.": 75, "us.deficit.": 75,
     "us.interest.": 75, "kr.housing.": 120, "kr.": 200, "jp.": 10,
+    "us.tic.": 120,     # TIC publishes ~2 months in arrears
 }
 
 UST_TENORS = ("m1", "y2", "y10", "y30")
@@ -171,6 +174,53 @@ def build():
     jdate = pick("jp.jgb.y10")[0]
     jgb = curve("jp.jgb", JGB_TENORS, jdate)
 
+    # --- who holds the debt (TIC) --------------------------------------------
+    # The demand side of Gauge 2. Total foreign demand can rise while the
+    # composition rotates out of official reserve managers, and only the second
+    # of those is a statement about price-insensitive buyers.
+    tdate, official = pick("us.tic.official")
+    _, private = pick("us.tic.private", on_or_before=tdate)
+    _, tic_total = pick("us.tic.total", on_or_before=tdate)
+    tic_since = _since(tdate, TIC_WINDOW_YEARS)
+    off_hist = store.series("us.tic.official", since=tic_since)
+    priv_hist = store.series("us.tic.private", since=tic_since)
+    tot_hist = store.series("us.tic.total", since=tic_since)
+    _, off_yr = years_ago("us.tic.official", tdate, 1)
+    _, tot_yr = years_ago("us.tic.total", tdate, 1)
+
+    countries = []
+    for slug, name in TIC_NAMES.items():
+        series = f"us.tic.country.{slug}"
+        points = store.series(series, since=tic_since)
+        if len(points) < 2:
+            raise KeyError(f"{series}: nothing in the last {TIC_WINDOW_YEARS} years")
+        base, latest_v = points[0][1], points[-1][1]
+        countries.append({"slug": slug, "name": name,
+                          "base": base, "latest": latest_v,
+                          "change": latest_v - base,
+                          "change_pct": (latest_v / base - 1) * 100,
+                          "share_pct": latest_v / tic_total * 100})
+    countries.sort(key=lambda c: -c["latest"])
+
+    tic = {
+        "date": tdate,
+        "window": [off_hist[0][0], tdate],
+        "window_years": TIC_WINDOW_YEARS,
+        "official": official, "private": private, "total": tic_total,
+        "official_share_pct": official / tic_total * 100,
+        "official_share_pct_yr_ago": off_yr / tot_yr * 100,
+        "official_chg_12m": official - off_yr,
+        "official_chg_12m_pct": (official / off_yr - 1) * 100,
+        "official_series": [list(r) for r in off_hist],
+        "private_series": [list(r) for r in priv_hist],
+        "total_series": [list(r) for r in tot_hist],
+        "official_chg_window": official - off_hist[0][1],
+        "private_chg_window": private - priv_hist[0][1],
+        "total_chg_window": tic_total - tot_hist[0][1],
+        "countries": countries,
+        "countries_share_pct": sum(c["latest"] for c in countries) / tic_total * 100,
+    }
+
     # --- korea ---------------------------------------------------------------
     kr = {}
     for key, series in (("base_rate", "kr.base_rate"), ("cpi_index", "kr.cpi"),
@@ -250,6 +300,7 @@ def build():
                 "yr_ago_usd_mn": fed_yr_ago,
                 "monthly": [list(r) for r in fed_monthly]},
         "market": market,
+        "tic": tic,
         "asia": {
             "japan": {"yields": jgb, "jgb10": jgb["now"]["y10"],
                       "jgb10_chg_12m": jgb["now"]["y10"] - jgb["yr_ago"]["y10"],

@@ -28,7 +28,8 @@ Gauge definitions come from *How Countries Go Broke: The Big Cycle* (2025).
 ## Conventions
 
 - Series names are dotted and namespaced: `us.debt.public`, `us.ust.y30`,
-  `fx.usdkrw`, `kr.base_rate`, `mkt.gold_usd`, `jp.jgb.y30`.
+  `fx.usdkrw`, `kr.base_rate`, `mkt.gold_usd`, `jp.jgb.y30`,
+  `us.tic.country.japan`.
 - Read gauges over a window, not a print. Anything that swings on operational
   noise — the weekly H.4.1 especially — gets scored on a slope whose length is a
   named constant in `gauges.py`. A single print is not evidence of direction.
@@ -51,6 +52,21 @@ Gauge definitions come from *How Countries Go Broke: The Big Cycle* (2025).
 4. If it feeds a gauge, add the threshold to `tracker/gauges.py`, not to
    `build.py`.
 
+## Reading TIC
+
+`us.tic.*` is the demand side of Gauge 2. Two things to keep straight:
+
+- The **official/private split exists only in aggregate** (`us.tic.official` /
+  `us.tic.private`). TIC never publishes it per country, so no country line can
+  be described as central-bank behaviour.
+- **Country totals are attributed to the custodian**, not the owner, which is
+  why the UK, Belgium, Cayman, Luxembourg and Ireland look so large.
+  `CUSTODY_CENTRES` and `RESERVE_MANAGERS` in `gauges.py` name that split; the
+  page states the caveat rather than letting the bars imply otherwise.
+- Values are **market** values, so they fall when yields rise with nobody
+  selling. TIC's net-transaction series would separate flow from valuation and
+  is not on FRED.
+
 ## Not yet wired
 
 - Treasury weighted-average maturity of new issuance (Dalio's "Treasury shortens
@@ -61,3 +77,7 @@ Gauge definitions come from *How Countries Go Broke: The Big Cycle* (2025).
   indices now come through ECOS and need no extra key, but R-ONE's own API wants
   a key issued by 한국부동산원 itself; a data.go.kr key returns ERROR-290.
 - 日銀 JGB holdings, to sit beside the MOF curve as Japan's Gauge 3.
+- Official gold reserves, the other half of the TIC marker. FRED has nothing
+  usable, IMF `dataservices.imf.org` is retired and `api.imf.org` 404s on IFS;
+  World Gold Council has the tonnage but needs scraping or a licence.
+- TIC net transactions, to separate official selling from mark-to-market.
