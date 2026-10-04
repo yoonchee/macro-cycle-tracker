@@ -55,9 +55,15 @@ ECOS_SERIES = {
     # move paid for out of rent from one paid for out of leverage; the 실거래
     # index is what buyers actually transacted at, which is not the same thing
     # as the survey index and lately has not moved with it.
-    "kr.housing.seoul_sale":   ("901Y144", "M", ("H69B", "R70F")),   # 매매가격지수
-    "kr.housing.seoul_jeonse": ("901Y145", "M", ("H69B", "R70F")),   # 전세가격지수
-    "kr.housing.seoul_wolse":  ("901Y146", "M", ("H69B", "R70F")),   # 월세통합가격지수
+    #
+    # 한국부동산원 rebases the survey indices, and ECOS then opens a new table
+    # per 기준월 with new item codes and freezes the old one — it does not
+    # error, the old table just stops growing. These are 기준월 2026.06 and carry
+    # the full history from 2021-06 on that base, so the store's upsert rewrites
+    # every date and no splice is needed.
+    "kr.housing.seoul_sale":   ("901Y149", "M", ("01", "a7")),   # 매매가격지수
+    "kr.housing.seoul_jeonse": ("901Y150", "M", ("01", "a7")),   # 전세가격지수
+    "kr.housing.seoul_wolse":  ("901Y151", "M", ("01", "a7")),   # 월세통합가격지수
     "kr.housing.seoul_real":   ("901Y089", "M", ("200",)),           # 아파트 매매 실거래가격지수
 }
 
