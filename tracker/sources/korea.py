@@ -23,11 +23,21 @@ Statistic codes are verified against the live ECOS catalogue (StatisticTableList
 INFO-200 "해당하는 데이터가 없습니다" rather than an error, so `python -m
 tracker.sources.korea --catalog <keyword>` re-discovers them.
 """
+import time
+
 import requests
 
-from ..config import ECOS_API_KEY, REB_API_KEY, UA, TIMEOUT
+from ..config import ECOS_API_KEY, REB_API_KEY, UA
 
 BASE = "https://ecos.bok.or.kr/api"
+
+# ECOS drops off the network for minutes at a time, and from a CI runner that
+# looks like every call hanging to its connect timeout. A short connect timeout
+# keeps a dead host cheap; backoff of 5s, 15s, 45s rides out a blip of about a
+# minute. Errors ECOS reports itself (RESULT, e.g. INFO-200 on a stale code) are
+# answers, not outages, and are never retried.
+ECOS_TIMEOUT = (10, 30)     # (connect, read)
+ECOS_RETRIES = 4
 
 # series name -> (통계표코드, 주기, (항목코드, ...))
 # Tables keyed on more than one dimension take the codes in the order ECOS
@@ -88,9 +98,16 @@ def _call(service, *parts, n=1000):
     url = f"{BASE}/{service}/{ECOS_API_KEY}/json/kr/1/{n}/" + "/".join(str(p) for p in parts)
     if parts:
         url += "/"
-    r = requests.get(url, headers=UA, timeout=TIMEOUT)
-    r.raise_for_status()
-    body = r.json()
+    for attempt in range(ECOS_RETRIES):
+        try:
+            r = requests.get(url, headers=UA, timeout=ECOS_TIMEOUT)
+            r.raise_for_status()
+            body = r.json()
+            break
+        except requests.RequestException:
+            if attempt == ECOS_RETRIES - 1:
+                raise
+            time.sleep(5 * 3 ** attempt)
     if "RESULT" in body:                       # ECOS reports errors with HTTP 200
         res = body["RESULT"]
         raise RuntimeError(f'{res.get("CODE")}: {res.get("MESSAGE")}')
@@ -110,6 +127,12 @@ def fetch_all():
                 out.append({"series": name, "date": _iso(row["TIME"]),
                             "value": row["DATA_VALUE"],
                             "unit": row.get("UNIT_NAME"), "source": "ecos"})
+        except requests.ConnectionError as exc:
+            # The host, not the code: retries are spent, so the remaining
+            # series would each burn the same budget against the job timeout.
+            failed.append(f"{name} ({code}/{'+'.join(items)}): {exc}")
+            failed.append("ECOS unreachable — skipped the remaining series")
+            break
         except Exception as exc:               # one bad code shouldn't kill the run
             failed.append(f"{name} ({code}/{'+'.join(items)}): {exc}")
     for f in failed:
