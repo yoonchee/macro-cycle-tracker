@@ -4,10 +4,18 @@ Free key: https://fredaccount.stlouisfed.org/apikeys
 Without a key this module is skipped; everything in Gauges 1 and 2 still works
 because those come from Treasury directly.
 """
+import time
+
 import requests
 from ..config import FRED_API_KEY, UA, TIMEOUT
 
 BASE = "https://api.stlouisfed.org/fred/series/observations"
+
+# FRED's gateway throws the odd 502 mid-run, and one bad series used to skip
+# every series in the module, Gauge 3 included. Retry 5xx and network errors
+# with backoff of 2s, 6s, 18s; a 4xx (a retired series id, a bad key) is an
+# answer, not an outage, and is never retried.
+FRED_RETRIES = 4
 
 SERIES = {
     # Gauge 3 — monetization
@@ -71,13 +79,24 @@ def fetch_all(start="2015-01-01"):
         raise RuntimeError("FRED_API_KEY not set — skipping FRED (Gauge 3 will be stale)")
     out = []
     for fid, name in {**SERIES, **TIC_SERIES}.items():
-        r = requests.get(BASE, headers=UA, timeout=TIMEOUT, params={
-            "series_id": fid, "api_key": FRED_API_KEY, "file_type": "json",
-            "observation_start": start,
-        })
-        r.raise_for_status()
-        for o in r.json().get("observations", []):
+        for o in _observations(fid, start):
             if o["value"] != ".":
                 out.append({"series": name, "date": o["date"], "value": o["value"],
                             "source": "fred"})
     return out
+
+
+def _observations(fid, start):
+    for attempt in range(FRED_RETRIES):
+        try:
+            r = requests.get(BASE, headers=UA, timeout=TIMEOUT, params={
+                "series_id": fid, "api_key": FRED_API_KEY, "file_type": "json",
+                "observation_start": start,
+            })
+            r.raise_for_status()
+            return r.json().get("observations", [])
+        except requests.RequestException as exc:
+            status = getattr(exc.response, "status_code", None)
+            if attempt == FRED_RETRIES - 1 or (status and status < 500):
+                raise
+            time.sleep(2 * 3 ** attempt)

@@ -51,6 +51,11 @@ Gauge definitions come from *How Countries Go Broke: The Big Cycle* (2025).
 publishes: it commits `data/snapshot.json` and `docs/index.html`, and Pages
 serves `docs/` from `main`, so a green run republishes the site.
 
+The store rides between runs in the Actions cache, which GitHub evicts after
+seven days untouched — about the weekly cadence. `keep-store-warm.yml` restores
+it mid-week to keep it alive. If it is lost anyway, rerun with `mspd_years` set:
+MSPD serves only a recent window, so a cold store otherwise starts history over.
+
 `snapshot.py` raises on a missing or stale series rather than writing zeros, so
 a partial fetch fails the run instead of shipping a page that looks fine and
 isn't. If a run fails on staleness, check `MAX_AGE_DAYS` against the source's

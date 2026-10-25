@@ -31,17 +31,19 @@ jobs:
     # Fail in twenty minutes rather than burning the default six hours.
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: "3.13"
           cache: pip
 
-      # The store is gitignored, so carry it between runs. Sources backfill
-      # years of history, so a cache miss costs a slower run, not data.
+      # The store is gitignored, so carry it between runs. A miss costs data,
+      # not just time: MSPD serves only MSPD_YEARS back, so the accumulated
+      # maturity history goes with the cache. keep-store-warm.yml stops the
+      # seven-day eviction; after a miss, rerun with mspd_years to backfill.
       - name: Restore series store
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: data/history.sqlite
           key: store-${{ github.run_id }}
@@ -81,7 +83,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: monitor-${{ github.run_number }}
           path: |

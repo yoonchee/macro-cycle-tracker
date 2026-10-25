@@ -48,7 +48,13 @@ MAX_AGE_DAYS = {
     "us.issuance.": 60,
     "mkt.": 7, "fx.": 7, "us.ust.": 7, "us.debt.": 10,
     "us.fed.": 21, "us.receipts.": 75, "us.outlays.": 75, "us.deficit.": 75,
-    "us.interest.": 75, "kr.housing.": 120, "kr.": 200, "jp.": 10,
+    "us.interest.": 75, "kr.housing.": 120,
+    # 가계신용 is quarterly and ECOS dates a quarter by its first day, so the
+    # newest point is already 3 months old when the quarter closes and BOK
+    # releases ~8 weeks after that: Q2 (stamped 04-01) is still the latest in
+    # mid-November, at ~235 days.
+    "kr.household_": 250,
+    "kr.": 200, "jp.": 10,
     "us.tic.": 120,     # TIC publishes ~2 months in arrears
 }
 

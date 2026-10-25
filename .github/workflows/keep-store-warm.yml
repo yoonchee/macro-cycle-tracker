@@ -1,0 +1,27 @@
+name: Keep series store warm
+
+# GitHub evicts a cache nobody has touched for seven days, and the weekly
+# refresh runs every seven days give or take the scheduler's jitter, so a late
+# run used to find the store gone. A miss is not just slower: MSPD only serves
+# the recent window, so the history the store had accumulated is lost. A
+# restore counts as access, so touching it mid-week keeps it alive.
+
+on:
+  schedule:
+    - cron: "0 22 * * 2"    # Tuesdays 22:00 UTC, midway between refreshes
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  touch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Restore series store
+        uses: actions/cache/restore@v6
+        with:
+          path: data/history.sqlite
+          key: store-
+          restore-keys: store-
